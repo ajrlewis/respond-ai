@@ -17,14 +17,16 @@ from app.ai import get_chat_model, get_embedding_model, get_structured_model
 from app.ai.providers import AIConfigurationError, AIProviderError
 from app.ai.schemas import (
     DraftMetadataResult,
+    EvidenceEvaluationResult,
     EvidenceSynthesisResult,
     QuestionClassificationResult,
+    RetrievalPlanResult,
     RevisionIntentResult,
 )
 from app.core.config import settings
 from app.db.models import RFPReview, RFPSession
 from app.graph.state import WorkflowState
-from app.graph.tools import keyword_search, semantic_search
+from app.graph.tools import expand_chunk_context, keyword_search, semantic_search
 from app.prompts import render_prompt_template as render_central_prompt_template
 from app.prompts.drafting import (
     draft_metadata_system_prompt,
@@ -70,6 +72,8 @@ def build_structured_confidence_payload(
     *,
     metadata: DraftMetadataResult | None = None,
     synthesis: EvidenceSynthesisResult | None = None,
+    evaluation: EvidenceEvaluationResult | None = None,
+    retrieval_strategy_used: str | None = None,
     retrieval_notes: str = "",
     fallback_score: float | None = None,
     fallback_compliance: Literal["passed", "needs_review", "unknown"] = "unknown",
@@ -88,7 +92,19 @@ def build_structured_confidence_payload(
                     if isinstance(item, str) and item.strip()
                 }
             )
-        score = 0.78
+        if evaluation:
+            missing_info = sorted(
+                {
+                    item.strip()
+                    for item in [*missing_info, *evaluation.missing_information]
+                    if isinstance(item, str) and item.strip()
+                }
+            )
+        score = float(evaluation.confidence) if evaluation else 0.78
+        if evaluation and evaluation.coverage == "partial":
+            score -= 0.08
+        if evaluation and evaluation.coverage == "weak":
+            score -= 0.2
         if missing_info:
             score -= 0.18
         if metadata.compliance_flags:
@@ -100,14 +116,38 @@ def build_structured_confidence_payload(
             "model_notes": metadata.confidence_notes.strip(),
             "retrieval_notes": retrieval_notes.strip(),
             "evidence_gaps": missing_info,
+            "retrieval_strategy": (retrieval_strategy_used or "").strip() or None,
+            "coverage": evaluation.coverage if evaluation else "unknown",
+            "recommended_action": evaluation.recommended_action if evaluation else "unknown",
+            "selected_chunk_ids": list(evaluation.selected_chunk_ids) if evaluation else [],
+            "rejected_chunk_ids": list(evaluation.rejected_chunk_ids) if evaluation else [],
+            "notes_for_drafting": list(evaluation.notes_for_drafting) if evaluation else [],
         }
 
+    coverage = evaluation.coverage if evaluation else "unknown"
+    recommended_action = evaluation.recommended_action if evaluation else "unknown"
     return {
-        "score": fallback_score,
+        "score": (
+            float(evaluation.confidence)
+            if evaluation and isinstance(evaluation.confidence, (float, int))
+            else fallback_score
+        ),
         "compliance_status": fallback_compliance,
         "model_notes": fallback_notes.strip(),
         "retrieval_notes": retrieval_notes.strip(),
-        "evidence_gaps": list(fallback_gaps or []),
+        "evidence_gaps": sorted(
+            {
+                item.strip()
+                for item in [*(fallback_gaps or []), *(evaluation.missing_information if evaluation else [])]
+                if isinstance(item, str) and item.strip()
+            }
+        ),
+        "retrieval_strategy": (retrieval_strategy_used or "").strip() or None,
+        "coverage": coverage,
+        "recommended_action": recommended_action,
+        "selected_chunk_ids": list(evaluation.selected_chunk_ids) if evaluation else [],
+        "rejected_chunk_ids": list(evaluation.rejected_chunk_ids) if evaluation else [],
+        "notes_for_drafting": list(evaluation.notes_for_drafting) if evaluation else [],
     }
 
 
@@ -143,7 +183,104 @@ def render_confidence_notes(confidence_payload: dict) -> str:
     if retrieval_notes:
         notes.append(f"Retrieval notes: {retrieval_notes}")
 
+    retrieval_strategy = str(confidence_payload.get("retrieval_strategy", "")).strip()
+    if retrieval_strategy:
+        notes.append(f"Retrieval strategy: {retrieval_strategy}.")
+
+    coverage = str(confidence_payload.get("coverage", "")).strip()
+    if coverage:
+        notes.append(f"Evidence coverage: {coverage}.")
+
     return " ".join(notes)
+
+
+def retrieval_plan_fallback(question_text: str) -> RetrievalPlanResult:
+    """Deterministic fallback plan when structured planner is unavailable."""
+
+    lowered = question_text.lower()
+    if "esg" in lowered or "sustainability" in lowered:
+        category = "esg"
+    elif "risk" in lowered or "regulator" in lowered or "policy" in lowered:
+        category = "risk"
+    elif "team" in lowered:
+        category = "team"
+    elif "different" in lowered or "edge" in lowered:
+        category = "differentiation"
+    elif "track record" in lowered or "example" in lowered:
+        category = "track_record"
+    elif "process" in lowered or "due diligence" in lowered or "operat" in lowered:
+        category = "operations"
+    elif "strategy" in lowered or "renewable" in lowered:
+        category = "strategy"
+    else:
+        category = "other"
+
+    needs_examples = any(token in lowered for token in ("example", "case", "track record", "value creation"))
+    needs_quantitative_support = any(
+        token in lowered for token in ("return", "performance", "kpi", "capacity", "mw", "%", "metric")
+    )
+    needs_regulatory_context = any(token in lowered for token in ("regulator", "sfdr", "policy", "compliance"))
+
+    priority_sources = [category]
+    if needs_examples:
+        priority_sources.append("portfolio_examples")
+    if needs_quantitative_support:
+        priority_sources.append("performance_metrics")
+    if needs_regulatory_context:
+        priority_sources.append("regulatory_policy")
+
+    return RetrievalPlanResult(
+        question_type=category,
+        reasoning_summary="Heuristic planning fallback applied because structured planner was unavailable.",
+        sub_questions=[
+            "What direct evidence answers the core question?",
+            "What supporting examples demonstrate outcomes?",
+            "What caveats or gaps remain based on available internal documents?",
+        ],
+        retrieval_strategy="hybrid",
+        priority_sources=priority_sources,
+        needs_examples=needs_examples,
+        needs_quantitative_support=needs_quantitative_support,
+        should_expand_context=needs_examples or needs_quantitative_support or needs_regulatory_context,
+        needs_regulatory_context=needs_regulatory_context,
+        needs_prior_answers=True,
+        preferred_top_k=min(18, max(8, settings.retrieval_top_k)),
+        confidence=0.45,
+    )
+
+
+def _chunk_search_blob(chunk: dict) -> str:
+    parts = [
+        str(chunk.get("document_title", "")),
+        str(chunk.get("document_filename", "")),
+        str(chunk.get("text", "")),
+    ]
+    metadata = chunk.get("metadata", {})
+    if isinstance(metadata, dict):
+        for key in ("source_type", "category", "tags", "title"):
+            value = metadata.get(key)
+            if isinstance(value, str):
+                parts.append(value)
+            elif isinstance(value, list):
+                parts.extend(str(item) for item in value if isinstance(item, str))
+    return " ".join(parts).lower()
+
+
+def _chunk_has_numeric_signal(chunk: dict) -> bool:
+    text = _chunk_search_blob(chunk)
+    if re.search(r"\b\d+(\.\d+)?\s?(%|mw|gw|kwh|kpi|x)\b", text):
+        return True
+    return any(token in text for token in ("capacity", "metric", "performance", "irr", "moic", "yield"))
+
+
+def _chunk_has_example_signal(chunk: dict) -> bool:
+    text = _chunk_search_blob(chunk)
+    return any(token in text for token in ("example", "case study", "portfolio", "investment", "asset", "value creation"))
+
+
+def _chunk_matches_priority(chunk: dict, priorities: list[str]) -> bool:
+    blob = _chunk_search_blob(chunk)
+    return any(priority and priority in blob for priority in priorities)
 
 
 def evidence_item_key(item: dict) -> str:
@@ -401,32 +538,189 @@ class WorkflowNodes:
             )
             raise
 
-    async def classify_question(self, state: WorkflowState) -> WorkflowState:
-        """Classify question type using small model with heuristic fallback."""
+    async def classify_and_plan(self, state: WorkflowState) -> WorkflowState:
+        """Classify question and produce a structured retrieval plan."""
 
-        node_run_id, context_token = await self._start_node_observation("classify_question", state)
+        node_run_id, context_token = await self._start_node_observation("classify_and_plan", state)
         try:
-            await self._set_current_node(state.get("session_id"), "classify_question")
+            await self._set_current_node(state.get("session_id"), "classify_and_plan")
             question_text = state["question_text"]
             logger.debug(
-                "Node classify_question started session_id=%s question_chars=%d",
+                "Node classify_and_plan started session_id=%s question_chars=%d",
                 state.get("session_id"),
                 len(question_text),
             )
-            classification = await self._classify_with_model(question_text)
-            category = classification.question_type
-            logger.info("Node classify_question completed session_id=%s category=%s", state.get("session_id"), category)
+            plan = await self._plan_retrieval_with_model(question_text)
+            logger.info(
+                "Node classify_and_plan completed session_id=%s category=%s strategy=%s sub_questions=%d",
+                state.get("session_id"),
+                plan.question_type,
+                plan.retrieval_strategy,
+                len(plan.sub_questions),
+            )
 
             async with self._db() as db:
                 session = await db.get(RFPSession, uuid.UUID(state["session_id"]))
                 if session:
-                    session.question_type = category
+                    session.question_type = plan.question_type
+                    session.retrieval_plan_payload = plan.model_dump()
+                    session.retrieval_strategy_used = plan.retrieval_strategy
+                    session.retry_count = int(state.get("retry_count", 0) or 0)
+                    await db.commit()
+
+            classification = QuestionClassificationResult(
+                question_type=plan.question_type,
+                reasoning_summary=plan.reasoning_summary,
+                suggested_retrieval_strategy=plan.retrieval_strategy,
+                confidence=plan.confidence,
+            )
+            output = {
+                "question_type": plan.question_type,
+                "classification": classification.model_dump(),
+                "retrieval_plan": plan.model_dump(),
+                "retry_count": int(state.get("retry_count", 0) or 0),
+                "current_node": "classify_and_plan",
+                "session_id": state.get("session_id"),
+            }
+            await self._finish_node_observation(
+                node_run_id=node_run_id,
+                context_token=context_token,
+                output_state=output,
+                status="success",
+            )
+            return output
+        except BaseException as exc:
+            is_interrupt = self._is_human_wait_interrupt(exc)
+            await self._finish_node_observation(
+                node_run_id=node_run_id,
+                context_token=context_token,
+                output_state=state,
+                status="waiting_for_human" if is_interrupt else "error",
+                error_message=None if is_interrupt else str(exc),
+            )
+            raise
+
+    async def classify_question(self, state: WorkflowState) -> WorkflowState:
+        """Backward-compatible wrapper for legacy node name."""
+
+        return await self.classify_and_plan(state)
+
+    async def adaptive_retrieve(self, state: WorkflowState) -> WorkflowState:
+        """Retrieve evidence adaptively based on the planner output."""
+
+        node_run_id, context_token = await self._start_node_observation("adaptive_retrieve", state)
+        try:
+            await self._set_current_node(state.get("session_id"), "adaptive_retrieve")
+            query = state["question_text"]
+            retry_count = int(state.get("retry_count", 0) or 0)
+            plan = RetrievalPlanResult.model_validate(state.get("retrieval_plan") or retrieval_plan_fallback(query).model_dump())
+            config = self._build_retrieval_config(plan=plan, retry_count=retry_count)
+            logger.debug(
+                "Node adaptive_retrieve started session_id=%s strategy=%s retry=%d",
+                state.get("session_id"),
+                config["strategy"],
+                retry_count,
+            )
+
+            semantic_results: list[dict] = []
+            keyword_results: list[dict] = []
+            context_results: list[dict] = []
+            query_variants = [query, *[item for item in plan.sub_questions if isinstance(item, str) and item.strip()][:2]]
+            keyword_queries = query_variants if config["strategy"] in {"keyword", "hybrid"} else []
+            semantic_query = " ".join(query_variants) if config["strategy"] in {"semantic", "hybrid"} else ""
+
+            async with self._db() as db:
+                embedding_service = self._optional_embedding_service()
+                retrieval = RetrievalService(db=db, embedding_service=embedding_service)
+
+                if semantic_query:
+                    semantic_results = await semantic_search(retrieval, semantic_query, int(config["semantic_top_k"]))
+
+                if keyword_queries:
+                    per_query_k = max(2, int(config["keyword_top_k"]) // max(1, len(keyword_queries)))
+                    for variant in keyword_queries:
+                        keyword_results.extend(await keyword_search(retrieval, variant, per_query_k))
+
+                if not semantic_results and str(config["strategy"]) == "semantic":
+                    keyword_results.extend(
+                        await keyword_search(
+                            retrieval,
+                            query,
+                            max(4, int(config["semantic_top_k"])),
+                        )
+                    )
+                if not keyword_results and str(config["strategy"]) == "keyword":
+                    semantic_results.extend(
+                        await semantic_search(
+                            retrieval,
+                            query,
+                            max(4, int(config["keyword_top_k"])),
+                        )
+                    )
+
+                merged = self._apply_plan_scoring(
+                    chunks=[*semantic_results, *keyword_results],
+                    plan=plan,
+                    retry_count=retry_count,
+                )
+
+                if bool(config["expand_context"]) and merged:
+                    for chunk in merged[: int(config["expand_seed_count"])]:
+                        chunk_id = str(chunk.get("chunk_id", "")).strip()
+                        if chunk_id:
+                            context_results.extend(
+                                await expand_chunk_context(
+                                    retrieval,
+                                    chunk_id=chunk_id,
+                                    window=int(config["context_window"]),
+                                )
+                            )
+                    merged = self._apply_plan_scoring(
+                        chunks=[*merged, *context_results],
+                        plan=plan,
+                        retry_count=retry_count,
+                    )
+
+            final_top_k = int(config["final_top_k"])
+            retrieved = merged[:final_top_k]
+            retrieval_debug = {
+                "strategy": config["strategy"],
+                "semantic_top_k": int(config["semantic_top_k"]),
+                "keyword_top_k": int(config["keyword_top_k"]),
+                "final_top_k": final_top_k,
+                "expand_context": bool(config["expand_context"]),
+                "context_window": int(config["context_window"]),
+                "query_variants": query_variants,
+                "priority_sources": list(plan.priority_sources),
+                "semantic_results": len(semantic_results),
+                "keyword_results": len(keyword_results),
+                "context_results": len(context_results),
+                "retrieved_chunk_ids": [str(item.get("chunk_id", "")) for item in retrieved],
+                "retrieved_scores": [float(item.get("score", 0.0)) for item in retrieved],
+                "retry_count": retry_count,
+            }
+            logger.info(
+                "Node adaptive_retrieve completed session_id=%s strategy=%s retrieved=%d",
+                state.get("session_id"),
+                config["strategy"],
+                len(retrieved),
+            )
+
+            async with self._db() as db:
+                session = await db.get(RFPSession, uuid.UUID(state["session_id"]))
+                if session:
+                    session.retrieval_strategy_used = str(config["strategy"])
+                    session.retrieval_metadata_payload = retrieval_debug
+                    session.retrieval_plan_payload = plan.model_dump()
                     await db.commit()
 
             output = {
-                "question_type": category,
-                "classification": classification.model_dump(),
-                "current_node": "classify_question",
+                "retrieval_plan": plan.model_dump(),
+                "retrieval_strategy_used": str(config["strategy"]),
+                "retrieval_debug": retrieval_debug,
+                "retrieved_chunks": retrieved,
+                "retrieved_evidence": retrieved,
+                "current_node": "adaptive_retrieve",
                 "session_id": state.get("session_id"),
             }
             await self._finish_node_observation(
@@ -448,29 +742,110 @@ class WorkflowNodes:
             raise
 
     async def retrieve_evidence(self, state: WorkflowState) -> WorkflowState:
-        """Retrieve evidence through semantic and keyword methods."""
+        """Backward-compatible wrapper for legacy node name."""
 
-        node_run_id, context_token = await self._start_node_observation("retrieve_evidence", state)
+        return await self.adaptive_retrieve(state)
+
+    async def evaluate_evidence(self, state: WorkflowState) -> WorkflowState:
+        """Evaluate evidence sufficiency and select draft-ready chunks."""
+
+        node_run_id, context_token = await self._start_node_observation("evaluate_evidence", state)
         try:
-            await self._set_current_node(state.get("session_id"), "retrieve_evidence")
-            query = state["question_text"]
-            logger.debug("Node retrieve_evidence started session_id=%s", state.get("session_id"))
+            await self._set_current_node(state.get("session_id"), "evaluate_evidence")
+            question = state.get("question_text", "")
+            retry_count = int(state.get("retry_count", 0) or 0)
+            plan = RetrievalPlanResult.model_validate(state.get("retrieval_plan") or retrieval_plan_fallback(question).model_dump())
+            candidates = list(state.get("retrieved_evidence", []) or state.get("retrieved_chunks", []) or [])
+            logger.debug(
+                "Node evaluate_evidence started session_id=%s candidate_count=%d retry=%d",
+                state.get("session_id"),
+                len(candidates),
+                retry_count,
+            )
+
+            evaluation = await self._evaluate_evidence_with_model(
+                question=question,
+                plan=plan,
+                evidence=candidates,
+            )
+            evaluation = self._normalize_evaluation_result(evaluation=evaluation, evidence=candidates, plan=plan)
+            selected, rejected, annotated = self._partition_evidence(
+                evidence=candidates,
+                selected_ids=evaluation.selected_chunk_ids,
+                rejected_ids=evaluation.rejected_chunk_ids,
+            )
+
+            retrieval_strategy = str(state.get("retrieval_strategy_used", "")).strip() or plan.retrieval_strategy
+            retrieval_notes = build_confidence_notes(selected or candidates)
+            if evaluation.evidence_summary.strip():
+                retrieval_notes = f"{retrieval_notes} {evaluation.evidence_summary.strip()}".strip()
+
+            effective_retry_count = retry_count
+            final_evaluation = evaluation
+            if evaluation.recommended_action == "retrieve_more" and retry_count >= 1:
+                final_evaluation = evaluation.model_copy(
+                    update={
+                        "recommended_action": "proceed_with_caveats",
+                        "notes_for_drafting": [
+                            *evaluation.notes_for_drafting,
+                            "Additional retrieval was already attempted once; proceed with explicit caveats.",
+                        ],
+                    }
+                )
+
+            confidence_payload = build_structured_confidence_payload(
+                evaluation=final_evaluation,
+                retrieval_strategy_used=retrieval_strategy,
+                retrieval_notes=retrieval_notes,
+                fallback_score=0.35 if final_evaluation.coverage == "weak" else 0.55,
+                fallback_compliance="unknown",
+                fallback_notes="Evidence evaluation completed without draft metadata extraction.",
+                fallback_gaps=final_evaluation.missing_information,
+            )
+            confidence_notes = render_confidence_notes(confidence_payload)
+
+            next_plan = plan
+            if final_evaluation.recommended_action == "retrieve_more" and retry_count < 1:
+                effective_retry_count = retry_count + 1
+                next_plan = self._augment_plan_for_retry(plan=plan, evaluation=final_evaluation)
+
+            logger.info(
+                "Node evaluate_evidence completed session_id=%s coverage=%s selected=%d rejected=%d action=%s retry=%d",
+                state.get("session_id"),
+                final_evaluation.coverage,
+                len(selected),
+                len(rejected),
+                final_evaluation.recommended_action,
+                effective_retry_count,
+            )
 
             async with self._db() as db:
-                embedding_service = self._optional_embedding_service()
-                retrieval = RetrievalService(db=db, embedding_service=embedding_service)
+                session = await db.get(RFPSession, uuid.UUID(state["session_id"]))
+                if session:
+                    session.evidence_payload = annotated
+                    session.selected_evidence_payload = selected
+                    session.rejected_evidence_payload = rejected
+                    session.evidence_evaluation_payload = final_evaluation.model_dump()
+                    session.retrieval_plan_payload = next_plan.model_dump()
+                    session.retrieval_strategy_used = retrieval_strategy
+                    session.retry_count = effective_retry_count
+                    session.confidence_notes = confidence_notes
+                    session.confidence_payload = confidence_payload
+                    await db.commit()
 
-                semantic = await semantic_search(retrieval, query, settings.retrieval_top_k)
-                keyword = await keyword_search(retrieval, query, settings.retrieval_top_k)
-                merged = semantic + keyword
-            logger.info(
-                "Node retrieve_evidence completed session_id=%s semantic=%d keyword=%d merged=%d",
-                state.get("session_id"),
-                len(semantic),
-                len(keyword),
-                len(merged),
-            )
-            output = {"retrieved_evidence": merged, "current_node": "retrieve_evidence", "session_id": state.get("session_id")}
+            output = {
+                "retrieval_plan": next_plan.model_dump(),
+                "retrieval_strategy_used": retrieval_strategy,
+                "retry_count": effective_retry_count,
+                "selected_evidence": selected,
+                "rejected_evidence": rejected,
+                "curated_evidence": selected,
+                "evidence_evaluation": final_evaluation.model_dump(),
+                "confidence_notes": confidence_notes,
+                "confidence_payload": confidence_payload,
+                "current_node": "evaluate_evidence",
+                "session_id": state.get("session_id"),
+            }
             await self._finish_node_observation(
                 node_run_id=node_run_id,
                 context_token=context_token,
@@ -601,18 +976,22 @@ class WorkflowNodes:
         node_run_id, context_token = await self._start_node_observation("draft_response", state)
         try:
             await self._set_current_node(state.get("session_id"), "draft_response")
+            selected_evidence = state.get("selected_evidence", []) or state.get("curated_evidence", [])
             logger.debug(
                 "Node draft_response started session_id=%s evidence_count=%d",
                 state.get("session_id"),
-                len(state.get("curated_evidence", [])),
+                len(selected_evidence),
             )
             answer, confidence_notes, confidence_payload, draft_metadata = await self._draft_answer(
                 question=state["question_text"],
                 question_type=state.get("question_type", "other"),
                 tone=state.get("tone", "formal"),
-                evidence=state.get("curated_evidence", []),
+                evidence=selected_evidence,
                 existing_confidence=state.get("confidence_notes", ""),
                 synthesis=state.get("evidence_synthesis", {}),
+                retrieval_plan=state.get("retrieval_plan", {}),
+                evidence_evaluation=state.get("evidence_evaluation", {}),
+                retrieval_strategy_used=state.get("retrieval_strategy_used"),
             )
             logger.info(
                 "Node draft_response completed session_id=%s answer_chars=%d",
@@ -626,6 +1005,7 @@ class WorkflowNodes:
                     session.draft_answer = answer
                     session.confidence_notes = confidence_notes
                     session.confidence_payload = {**confidence_payload, "draft_metadata": draft_metadata}
+                    session.selected_evidence_payload = selected_evidence
                     session.evidence_gaps_acknowledged = False
                     session.evidence_gaps_acknowledged_at = None
                     session.status = "awaiting_review"
@@ -1045,6 +1425,34 @@ class WorkflowNodes:
                         "included_chunk_ids": included_chunk_ids,
                         "excluded_chunk_ids": excluded_chunk_ids,
                         "selected_evidence": _audit_evidence_rows(active_evidence(evidence_for_snapshot)),
+                        "retrieval_plan": state.get("retrieval_plan") or getattr(session, "retrieval_plan_payload", {}) or {},
+                        "retrieval_strategy": (
+                            state.get("retrieval_strategy_used")
+                            or getattr(session, "retrieval_strategy_used", None)
+                        ),
+                        "evidence_evaluation": (
+                            state.get("evidence_evaluation")
+                            or getattr(session, "evidence_evaluation_payload", {}) or {}
+                        ),
+                        "retry_count": int(
+                            state.get("retry_count")
+                            if state.get("retry_count") is not None
+                            else getattr(session, "retry_count", 0)
+                        ),
+                        "selected_chunk_ids": list(
+                            {
+                                str(item.get("chunk_id", "")).strip() or evidence_item_key(item)
+                                for item in (getattr(session, "selected_evidence_payload", []) or [])
+                                if isinstance(item, dict)
+                            }
+                        ),
+                        "rejected_chunk_ids": list(
+                            {
+                                str(item.get("chunk_id", "")).strip() or evidence_item_key(item)
+                                for item in (getattr(session, "rejected_evidence_payload", []) or [])
+                                if isinstance(item, dict)
+                            }
+                        ),
                         "confidence_score": (state.get("confidence_payload") or {}).get("score"),
                         "confidence_notes": state.get("confidence_notes", ""),
                         "confidence_payload": state.get("confidence_payload", {}) or {},
@@ -1096,44 +1504,346 @@ class WorkflowNodes:
             logger.warning("Embedding service unavailable; semantic retrieval will be skipped error=%s", exc)
             return None
 
-    async def _classify_with_model(self, question_text: str) -> QuestionClassificationResult:
+    async def _plan_retrieval_with_model(self, question_text: str) -> RetrievalPlanResult:
         try:
-            classifier = get_structured_model(
-                schema=QuestionClassificationResult,
-                purpose="classification",
+            planner = get_structured_model(
+                schema=RetrievalPlanResult,
+                purpose="planning",
             )
-            classification = await classifier.ainvoke(
-                system_prompt=render_prompt_template("classify_question", "system"),
-                user_prompt=render_prompt_template("classify_question", "user", question_text=question_text),
+            plan = await planner.ainvoke(
+                system_prompt=render_prompt_template("classify_and_plan", "system"),
+                user_prompt=render_prompt_template("classify_and_plan", "user", question_text=question_text),
                 temperature=0,
             )
-            logger.debug("Question classification completed via model category=%s", classification.question_type)
-            return classification
+            logger.debug(
+                "Retrieval planning completed via model category=%s strategy=%s",
+                plan.question_type,
+                plan.retrieval_strategy,
+            )
+            return plan
         except (AIConfigurationError, AIProviderError, RuntimeError, TimeoutError) as exc:
-            logger.info("Question classification model unavailable; using heuristic fallback error=%s", exc)
+            logger.info("Retrieval planning model unavailable; using heuristic fallback error=%s", exc)
+            return retrieval_plan_fallback(question_text)
 
-        lowered = question_text.lower()
-        if "esg" in lowered or "sustainability" in lowered:
-            category = "esg"
-        elif "risk" in lowered or "regulator" in lowered or "policy" in lowered:
-            category = "risk"
-        elif "team" in lowered:
-            category = "team"
-        elif "different" in lowered or "edge" in lowered:
-            category = "differentiation"
-        elif "track record" in lowered or "example" in lowered:
-            category = "track_record"
-        elif "process" in lowered or "due diligence" in lowered:
-            category = "operations"
-        elif "strategy" in lowered or "renewable" in lowered:
-            category = "strategy"
-        else:
-            category = "other"
+    async def _classify_with_model(self, question_text: str) -> QuestionClassificationResult:
+        """Backward-compatible classifier adapter built on retrieval planning."""
+
+        plan = await self._plan_retrieval_with_model(question_text)
         return QuestionClassificationResult(
-            question_type=category,
-            reasoning_summary="Heuristic fallback applied because structured classifier was unavailable.",
-            suggested_retrieval_strategy="hybrid",
-            confidence=0.45,
+            question_type=plan.question_type,
+            reasoning_summary=plan.reasoning_summary,
+            suggested_retrieval_strategy=plan.retrieval_strategy,
+            confidence=plan.confidence,
+        )
+
+    def _build_retrieval_config(self, *, plan: RetrievalPlanResult, retry_count: int) -> dict[str, int | str | bool]:
+        base_top_k = max(4, int(plan.preferred_top_k or settings.retrieval_top_k))
+        if plan.needs_examples:
+            base_top_k += 2
+        if plan.needs_quantitative_support:
+            base_top_k += 2
+        if retry_count > 0:
+            base_top_k += 4
+
+        base_top_k = min(28, base_top_k)
+        strategy = str(plan.retrieval_strategy).strip() or "hybrid"
+        if strategy not in {"semantic", "keyword", "hybrid"}:
+            strategy = "hybrid"
+
+        semantic_top_k = base_top_k if strategy in {"semantic", "hybrid"} else 0
+        keyword_top_k = base_top_k if strategy in {"keyword", "hybrid"} else 0
+        if strategy == "hybrid":
+            semantic_top_k = max(4, int(round(base_top_k * 0.7)))
+            keyword_top_k = max(4, int(round(base_top_k * 0.7)))
+
+        return {
+            "strategy": strategy,
+            "semantic_top_k": semantic_top_k,
+            "keyword_top_k": keyword_top_k,
+            "final_top_k": min(32, max(settings.final_evidence_k + 2, base_top_k)),
+            "expand_context": bool(plan.should_expand_context or retry_count > 0),
+            "context_window": 2 if retry_count > 0 else 1,
+            "expand_seed_count": 3 if (plan.needs_examples or retry_count > 0) else 2,
+        }
+
+    def _apply_plan_scoring(
+        self,
+        *,
+        chunks: list[dict],
+        plan: RetrievalPlanResult,
+        retry_count: int,
+    ) -> list[dict]:
+        deduped: dict[str, dict] = {}
+        priorities = [item.strip().lower() for item in plan.priority_sources if isinstance(item, str) and item.strip()]
+        if plan.needs_prior_answers and "prior_rfp_answers" not in priorities:
+            priorities.append("prior_rfp_answers")
+        if plan.question_type and plan.question_type not in priorities:
+            priorities.append(str(plan.question_type))
+
+        for chunk in chunks:
+            row = {**chunk}
+            row_key = evidence_item_key(row)
+            boost = 0.0
+            if _chunk_matches_priority(row, priorities):
+                boost += 0.22
+            if plan.needs_examples and _chunk_has_example_signal(row):
+                boost += 0.18
+            if plan.needs_quantitative_support and _chunk_has_numeric_signal(row):
+                boost += 0.18
+            if plan.needs_regulatory_context and any(
+                token in _chunk_search_blob(row)
+                for token in ("regulatory", "regulator", "sfdr", "policy", "compliance")
+            ):
+                boost += 0.14
+            if retry_count > 0 and "context_expand" in str(row.get("retrieval_method", "")):
+                boost += 0.08
+
+            base_score = float(row.get("score", 0.0) or 0.0)
+            row["score"] = round(base_score + boost, 6)
+            row["adaptive_score_boost"] = round(boost, 6)
+            current = deduped.get(row_key)
+            if current is None or float(row["score"]) > float(current.get("score", 0.0)):
+                deduped[row_key] = row
+
+        ranked = sorted(
+            deduped.values(),
+            key=lambda item: float(item.get("score", 0.0)),
+            reverse=True,
+        )
+        return ranked
+
+    async def _evaluate_evidence_with_model(
+        self,
+        *,
+        question: str,
+        plan: RetrievalPlanResult,
+        evidence: list[dict],
+    ) -> EvidenceEvaluationResult:
+        if not evidence:
+            return EvidenceEvaluationResult(
+                coverage="weak",
+                confidence=0.1,
+                selected_chunk_ids=[],
+                rejected_chunk_ids=[],
+                missing_information=["No relevant internal evidence was retrieved."],
+                contradictions_found=[],
+                evidence_summary="No supporting evidence available for drafting.",
+                recommended_action="retrieve_more",
+                notes_for_drafting=["Do not assert unsupported facts without retrieval coverage."],
+                coverage_by_sub_question={item: "weak" for item in plan.sub_questions[:6]},
+                num_supporting_chunks=0,
+                num_example_chunks=0,
+            )
+
+        sub_questions = "\n".join(f"- {item}" for item in plan.sub_questions[:8]) or "- (none)"
+        priority_sources = ", ".join(plan.priority_sources[:8]) or "unspecified"
+        try:
+            evaluator = get_structured_model(
+                schema=EvidenceEvaluationResult,
+                purpose="evidence_evaluation",
+            )
+            return await evaluator.ainvoke(
+                system_prompt=render_prompt_template("evaluate_evidence", "system"),
+                user_prompt=render_prompt_template(
+                    "evaluate_evidence",
+                    "user",
+                    question_type=plan.question_type,
+                    question=question,
+                    reasoning_summary=plan.reasoning_summary,
+                    sub_questions=sub_questions,
+                    priority_sources=priority_sources,
+                    needs_examples="yes" if plan.needs_examples else "no",
+                    needs_quantitative_support="yes" if plan.needs_quantitative_support else "no",
+                    needs_regulatory_context="yes" if plan.needs_regulatory_context else "no",
+                    evidence=format_evidence_blob(evidence),
+                ),
+                temperature=0,
+            )
+        except (AIConfigurationError, AIProviderError, RuntimeError, TimeoutError) as exc:
+            logger.warning("Evidence evaluation fallback applied error=%s", exc)
+
+        selected = evidence[: max(settings.final_evidence_k, 4)]
+        selected_ids = [evidence_item_key(item) for item in selected]
+        example_chunks = [item for item in selected if _chunk_has_example_signal(item)]
+        quantitative_chunks = [item for item in selected if _chunk_has_numeric_signal(item)]
+        missing: list[str] = []
+        if plan.needs_examples and not example_chunks:
+            missing.append("Concrete examples/case studies are limited in retrieved evidence.")
+        if plan.needs_quantitative_support and not quantitative_chunks:
+            missing.append("Quantitative support (metrics/KPIs/capacity) is limited in retrieved evidence.")
+        if plan.needs_regulatory_context:
+            has_regulatory = any(
+                token in _chunk_search_blob(item)
+                for item in selected
+                for token in ("regulatory", "policy", "sfdr", "compliance")
+            )
+            if not has_regulatory:
+                missing.append("Regulatory/policy context is limited in retrieved evidence.")
+
+        if not missing and len(selected) >= settings.final_evidence_k:
+            coverage: Literal["strong", "partial", "weak"] = "strong"
+            confidence = 0.82
+        elif missing and len(selected) <= 2:
+            coverage = "weak"
+            confidence = 0.36
+        else:
+            coverage = "partial"
+            confidence = 0.6
+
+        recommended_action: Literal["proceed", "proceed_with_caveats", "retrieve_more"]
+        if coverage == "weak":
+            recommended_action = "retrieve_more"
+        elif coverage == "partial":
+            recommended_action = "proceed_with_caveats"
+        else:
+            recommended_action = "proceed"
+
+        return EvidenceEvaluationResult(
+            coverage=coverage,
+            confidence=confidence,
+            selected_chunk_ids=selected_ids,
+            rejected_chunk_ids=[evidence_item_key(item) for item in evidence[len(selected):]],
+            missing_information=missing,
+            contradictions_found=[],
+            evidence_summary=(
+                f"Fallback evidence evaluation retained {len(selected)} chunk(s) for drafting with {coverage} coverage."
+            ),
+            recommended_action=recommended_action,
+            notes_for_drafting=(
+                [
+                    "Use cautious language and acknowledge evidence limits where needed.",
+                    *[f"Gap to acknowledge: {item}" for item in missing],
+                ]
+                if missing
+                else ["Evidence appears sufficient for a grounded draft."]
+            ),
+            coverage_by_sub_question={item: coverage for item in plan.sub_questions[:6]},
+            num_supporting_chunks=len(selected),
+            num_example_chunks=len(example_chunks),
+        )
+
+    def _normalize_evaluation_result(
+        self,
+        *,
+        evaluation: EvidenceEvaluationResult,
+        evidence: list[dict],
+        plan: RetrievalPlanResult,
+    ) -> EvidenceEvaluationResult:
+        valid_ids = {evidence_item_key(item) for item in evidence}
+        selected_ids = [item.strip() for item in evaluation.selected_chunk_ids if item.strip() in valid_ids]
+        rejected_ids = [item.strip() for item in evaluation.rejected_chunk_ids if item.strip() in valid_ids]
+
+        if not selected_ids and evidence:
+            selected_ids = [evidence_item_key(item) for item in evidence[: max(settings.final_evidence_k, 4)]]
+        rejected_ids = [item for item in rejected_ids if item not in selected_ids]
+
+        num_example = 0
+        num_supporting = 0
+        for item in evidence:
+            key = evidence_item_key(item)
+            if key not in selected_ids:
+                continue
+            num_supporting += 1
+            if _chunk_has_example_signal(item):
+                num_example += 1
+
+        coverage_by_sub_question = dict(evaluation.coverage_by_sub_question or {})
+        if not coverage_by_sub_question and plan.sub_questions:
+            coverage_by_sub_question = {item: evaluation.coverage for item in plan.sub_questions[:6]}
+
+        return evaluation.model_copy(
+            update={
+                "selected_chunk_ids": selected_ids,
+                "rejected_chunk_ids": rejected_ids,
+                "num_supporting_chunks": num_supporting,
+                "num_example_chunks": num_example,
+                "coverage_by_sub_question": coverage_by_sub_question,
+            }
+        )
+
+    def _partition_evidence(
+        self,
+        *,
+        evidence: list[dict],
+        selected_ids: list[str],
+        rejected_ids: list[str],
+    ) -> tuple[list[dict], list[dict], list[dict]]:
+        selected_lookup = {item.strip() for item in selected_ids if item.strip()}
+        rejected_lookup = {item.strip() for item in rejected_ids if item.strip()}
+        selected: list[dict] = []
+        rejected: list[dict] = []
+        annotated: list[dict] = []
+
+        for item in evidence:
+            row = {**item}
+            key = evidence_item_key(row)
+            is_selected = key in selected_lookup
+            is_rejected = key in rejected_lookup and not is_selected
+            row["selected_for_drafting"] = is_selected
+            row["rejected_by_evaluator"] = is_rejected
+            if is_selected:
+                selected.append(row)
+            elif is_rejected:
+                rejected.append(row)
+            annotated.append(row)
+
+        if not selected and evidence:
+            default_selected = {evidence_item_key(item) for item in evidence[: max(settings.final_evidence_k, 4)]}
+            selected = []
+            rejected = []
+            annotated = []
+            for item in evidence:
+                row = {**item}
+                key = evidence_item_key(row)
+                is_selected = key in default_selected
+                row["selected_for_drafting"] = is_selected
+                row["rejected_by_evaluator"] = not is_selected
+                if is_selected:
+                    selected.append(row)
+                else:
+                    rejected.append(row)
+                annotated.append(row)
+
+        return selected, rejected, annotated
+
+    def _augment_plan_for_retry(
+        self,
+        *,
+        plan: RetrievalPlanResult,
+        evaluation: EvidenceEvaluationResult,
+    ) -> RetrievalPlanResult:
+        priority_sources = [
+            item.strip()
+            for item in plan.priority_sources
+            if isinstance(item, str) and item.strip()
+        ]
+        additions: list[str] = []
+        if plan.needs_examples:
+            additions.append("portfolio_examples")
+        if plan.needs_quantitative_support:
+            additions.append("performance_metrics")
+        if plan.needs_regulatory_context:
+            additions.append("regulatory_policy")
+        if plan.needs_prior_answers:
+            additions.append("prior_rfp_answers")
+        if any("contradiction" in item.lower() for item in evaluation.notes_for_drafting):
+            additions.append("governance_policy")
+        for item in additions:
+            if item not in priority_sources:
+                priority_sources.append(item)
+
+        updated_reasoning = (
+            f"{plan.reasoning_summary.strip()} "
+            f"Retry retrieval targeted missing info: {'; '.join(evaluation.missing_information[:3])}."
+        ).strip()
+        return plan.model_copy(
+            update={
+                "priority_sources": priority_sources,
+                "should_expand_context": True,
+                "preferred_top_k": min(24, max(plan.preferred_top_k + 4, settings.retrieval_top_k + 2)),
+                "reasoning_summary": updated_reasoning,
+                "confidence": max(0.0, min(1.0, float(plan.confidence) * 0.9)),
+            }
         )
 
     async def _cross_reference_with_model(
@@ -1252,10 +1962,20 @@ class WorkflowNodes:
         evidence: list[dict],
         existing_confidence: str,
         synthesis: dict | None = None,
+        retrieval_plan: dict | None = None,
+        evidence_evaluation: dict | None = None,
+        retrieval_strategy_used: str | None = None,
     ) -> tuple[str, str, dict, dict]:
         if not evidence:
             logger.warning("Draft requested without evidence; returning low-confidence response")
+            evaluation_obj = (
+                EvidenceEvaluationResult.model_validate(evidence_evaluation or {})
+                if evidence_evaluation
+                else None
+            )
             confidence_payload = build_structured_confidence_payload(
+                evaluation=evaluation_obj,
+                retrieval_strategy_used=retrieval_strategy_used,
                 fallback_score=0.0,
                 fallback_compliance="unknown",
                 fallback_notes="No supporting chunks were retrieved.",
@@ -1273,6 +1993,30 @@ class WorkflowNodes:
         evidence_blob = format_evidence_blob(evidence)
         tone_guidelines = get_tone_guidelines(tone)
         synthesis_obj = EvidenceSynthesisResult.model_validate(synthesis or {}) if synthesis else None
+        evaluation_obj = (
+            EvidenceEvaluationResult.model_validate(evidence_evaluation or {})
+            if evidence_evaluation
+            else None
+        )
+        plan_obj = RetrievalPlanResult.model_validate(retrieval_plan or {}) if retrieval_plan else None
+        retrieval_plan_summary = "No explicit retrieval plan was provided."
+        if plan_obj:
+            sub_q = "; ".join(plan_obj.sub_questions[:4]) or "No explicit sub-questions."
+            priorities = ", ".join(plan_obj.priority_sources[:5]) or "unspecified"
+            retrieval_plan_summary = (
+                f"{plan_obj.reasoning_summary} "
+                f"Sub-questions: {sub_q}. "
+                f"Priority sources: {priorities}. "
+                f"Strategy: {plan_obj.retrieval_strategy}."
+            ).strip()
+        evidence_notes = "No explicit evaluator notes were provided."
+        if evaluation_obj:
+            notes = "; ".join(evaluation_obj.notes_for_drafting[:6])
+            evidence_notes = (
+                f"Coverage={evaluation_obj.coverage}; "
+                f"recommended_action={evaluation_obj.recommended_action}; "
+                f"{notes or 'Use selected evidence only.'}"
+            )
 
         try:
             drafter = get_chat_model(purpose="drafting")
@@ -1285,6 +2029,8 @@ class WorkflowNodes:
                     tone_guidelines=tone_guidelines,
                     question_type=question_type,
                     question=question,
+                    retrieval_plan_summary=retrieval_plan_summary,
+                    evidence_notes_for_drafting=evidence_notes,
                     evidence=evidence_blob,
                 ),
             )
@@ -1298,6 +2044,8 @@ class WorkflowNodes:
             confidence_payload = build_structured_confidence_payload(
                 metadata=metadata,
                 synthesis=synthesis_obj,
+                evaluation=evaluation_obj,
+                retrieval_strategy_used=retrieval_strategy_used,
                 retrieval_notes=existing_confidence,
             )
             return draft_text, render_confidence_notes(confidence_payload), confidence_payload, metadata.model_dump()
@@ -1324,6 +2072,8 @@ class WorkflowNodes:
             confidence_payload = build_structured_confidence_payload(
                 metadata=metadata,
                 synthesis=synthesis_obj,
+                evaluation=evaluation_obj,
+                retrieval_strategy_used=retrieval_strategy_used,
                 fallback_score=0.45,
                 fallback_compliance="unknown",
                 fallback_notes="Draft generated using deterministic fallback due to unavailable model.",

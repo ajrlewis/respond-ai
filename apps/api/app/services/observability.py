@@ -526,9 +526,13 @@ def summarize_workflow_state(state: Mapping[str, Any]) -> dict:
     if isinstance(confidence_payload, dict):
         confidence_score = confidence_payload.get("score")
         evidence_gaps = confidence_payload.get("evidence_gaps", [])
+        coverage = confidence_payload.get("coverage")
+        recommended_action = confidence_payload.get("recommended_action")
     else:
         confidence_score = None
         evidence_gaps = []
+        coverage = None
+        recommended_action = None
 
     summary = {
         "session_id": str(state.get("session_id", "") or "").strip() or None,
@@ -541,13 +545,20 @@ def summarize_workflow_state(state: Mapping[str, Any]) -> dict:
         "current_node": state.get("current_node"),
         "review_action": state.get("review_action"),
         "retrieved_evidence_count": len(state.get("retrieved_evidence", []) or []),
+        "retrieved_chunks_count": len(state.get("retrieved_chunks", []) or []),
         "curated_evidence_count": len(state.get("curated_evidence", []) or []),
+        "selected_evidence_count": len(state.get("selected_evidence", []) or []),
+        "rejected_evidence_count": len(state.get("rejected_evidence", []) or []),
         "excluded_evidence_count": len(state.get("excluded_evidence_keys", []) or []),
         "answer_versions_count": len(state.get("answer_versions", []) or []),
         "draft_chars": len(str(state.get("draft_answer", "") or "")),
         "final_chars": len(str(state.get("final_answer", "") or "")),
         "confidence_score": confidence_score if isinstance(confidence_score, (int, float)) else None,
         "evidence_gap_count": len([item for item in evidence_gaps if isinstance(item, str) and item.strip()]),
+        "coverage": coverage if isinstance(coverage, str) else None,
+        "recommended_action": recommended_action if isinstance(recommended_action, str) else None,
+        "retrieval_strategy_used": state.get("retrieval_strategy_used"),
+        "retry_count": int(state.get("retry_count", 0) or 0),
     }
     return sanitize_payload(summary)
 
@@ -684,6 +695,13 @@ async def refresh_session_metrics(session_id: str | uuid.UUID | None) -> None:
             row.metadata_json = {
                 "session_status": session.status,
                 "final_version_number": getattr(session, "final_version_number", None),
+                "retrieval_strategy_used": getattr(session, "retrieval_strategy_used", None),
+                "retry_count": int(getattr(session, "retry_count", 0) or 0),
+                "coverage": (
+                    (getattr(session, "evidence_evaluation_payload", {}) or {}).get("coverage")
+                    if isinstance(getattr(session, "evidence_evaluation_payload", {}), dict)
+                    else None
+                ),
             }
             await db.commit()
     except Exception as exc:  # pragma: no cover - defensive telemetry path

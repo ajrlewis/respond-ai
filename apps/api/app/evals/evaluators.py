@@ -8,8 +8,10 @@ from app.evals.metrics import (
     MetricResult,
     clamp_score,
     score_cost_efficiency,
+    score_evidence_readiness,
     score_grounding,
     score_latency,
+    score_planning_quality,
     score_retrieval_efficiency,
     score_review_process,
 )
@@ -30,6 +32,13 @@ class SessionEvalInput:
     time_to_approval_ms: int | None
     total_tokens: int
     estimated_cost_usd: float | None
+    has_retrieval_plan: bool
+    planner_sub_question_count: int
+    retrieval_strategy_used: str | None
+    evidence_coverage: str | None
+    recommended_action: str | None
+    missing_information_count: int
+    retrieval_retry_count: int
 
 
 @dataclass(slots=True)
@@ -59,6 +68,18 @@ def evaluate_session(record: SessionEvalInput) -> SessionEvalScore:
             approved=record.approved,
             num_revision_rounds=record.num_revision_rounds,
             review_event_count=record.review_event_count,
+        ),
+        score_planning_quality(
+            has_retrieval_plan=record.has_retrieval_plan,
+            planner_sub_question_count=record.planner_sub_question_count,
+            retrieval_strategy_used=record.retrieval_strategy_used,
+        ),
+        score_evidence_readiness(
+            evidence_coverage=record.evidence_coverage,
+            recommended_action=record.recommended_action,
+            missing_information_count=record.missing_information_count,
+            retrieval_retry_count=record.retrieval_retry_count,
+            has_final_answer=record.has_final_answer,
         ),
         score_latency(
             time_to_first_draft_ms=record.time_to_first_draft_ms,

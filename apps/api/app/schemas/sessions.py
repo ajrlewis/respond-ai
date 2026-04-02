@@ -25,6 +25,12 @@ class ConfidenceOut(BaseModel):
     model_notes: str = ""
     retrieval_notes: str = ""
     evidence_gaps: list[str] = Field(default_factory=list)
+    retrieval_strategy: str | None = None
+    coverage: Literal["strong", "partial", "weak", "unknown"] = "unknown"
+    recommended_action: Literal["proceed", "proceed_with_caveats", "retrieve_more", "unknown"] = "unknown"
+    selected_chunk_ids: list[str] = Field(default_factory=list)
+    rejected_chunk_ids: list[str] = Field(default_factory=list)
+    notes_for_drafting: list[str] = Field(default_factory=list)
 
 
 class AnswerVersionOut(BaseModel):
@@ -57,6 +63,8 @@ class SessionOut(BaseModel):
     tone: str
     status: str
     current_node: str | None
+    retrieval_strategy_used: str | None = None
+    retry_count: int = 0
     draft_answer: str | None
     final_answer: str | None
     final_version_number: int | None = None
@@ -69,6 +77,8 @@ class SessionOut(BaseModel):
     evidence_gaps_acknowledged_at: datetime | None = None
     confidence_notes: str | None
     confidence: ConfidenceOut
+    retrieval_plan: dict = Field(default_factory=dict)
+    evidence_evaluation: dict = Field(default_factory=dict)
     evidence: list[EvidenceChunk] = Field(default_factory=list)
     answer_versions: list[AnswerVersionOut] = Field(default_factory=list)
     final_audit: dict = Field(default_factory=dict)

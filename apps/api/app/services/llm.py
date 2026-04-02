@@ -18,14 +18,29 @@ class LLMService:
     @staticmethod
     def _purpose(purpose: str) -> str:
         normalized = (purpose or "").strip()
-        if normalized in {"classification", "cross_reference", "drafting", "revision", "evaluation", "polish", "draft_metadata", "revision_intent"}:
+        if normalized in {
+            "classification",
+            "planning",
+            "cross_reference",
+            "evidence_evaluation",
+            "drafting",
+            "revision",
+            "evaluation",
+            "polish",
+            "draft_metadata",
+            "revision_intent",
+        }:
             return normalized
         if "classify" in normalized:
             return "classification"
+        if "plan" in normalized:
+            return "planning"
         if "revise" in normalized:
             return "revision"
         if "draft" in normalized:
             return "drafting"
+        if "evaluate" in normalized:
+            return "evidence_evaluation"
         if "cross" in normalized or "evidence" in normalized:
             return "cross_reference"
         if "eval" in normalized:

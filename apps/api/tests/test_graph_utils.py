@@ -1,9 +1,10 @@
-from app.ai.schemas import DraftMetadataResult, EvidenceSynthesisResult
+from app.ai.schemas import DraftMetadataResult, EvidenceEvaluationResult, EvidenceSynthesisResult, RetrievalPlanResult
 from app.graph.nodes import (
     active_evidence,
     append_answer_version,
     build_confidence_notes,
     build_structured_confidence_payload,
+    retrieval_plan_fallback,
     render_confidence_notes,
     curate_evidence,
     mark_excluded_evidence,
@@ -79,10 +80,23 @@ def test_build_structured_confidence_notes() -> None:
         missing_information=["No external assurance statement located."],
         evidence_summary="Evidence supports governance process, but assurance detail is missing.",
     )
+    evaluation = EvidenceEvaluationResult(
+        coverage="partial",
+        confidence=0.64,
+        selected_chunk_ids=["chunk-1"],
+        rejected_chunk_ids=["chunk-2"],
+        missing_information=["No external assurance statement located."],
+        contradictions_found=[],
+        evidence_summary="Coverage is partial.",
+        recommended_action="proceed_with_caveats",
+        notes_for_drafting=["Acknowledge missing assurance statement."],
+    )
 
     payload = build_structured_confidence_payload(
         metadata=metadata,
         synthesis=synthesis,
+        evaluation=evaluation,
+        retrieval_strategy_used="hybrid",
         retrieval_notes="Retrieved 4 supporting chunks.",
     )
     notes = render_confidence_notes(payload)
@@ -91,6 +105,9 @@ def test_build_structured_confidence_notes() -> None:
     assert "Compliance status: Needs review." in notes
     assert "No external assurance statement located." in notes
     assert "Retrieved 4 supporting chunks." in notes
+    assert payload["retrieval_strategy"] == "hybrid"
+    assert payload["coverage"] == "partial"
+    assert payload["recommended_action"] == "proceed_with_caveats"
 
 
 def test_mark_excluded_evidence_and_filter_active() -> None:
@@ -116,3 +133,15 @@ def test_append_answer_version_skips_adjacent_duplicates() -> None:
     assert len(versions) == 2
     assert versions[0]["label"] == "Draft 1"
     assert versions[1]["label"] == "Draft 2"
+
+
+def test_retrieval_plan_fallback_infers_strategy_requirements() -> None:
+    plan = retrieval_plan_fallback(
+        "Describe your renewable strategy with portfolio examples and performance KPIs.",
+    )
+
+    assert isinstance(plan, RetrievalPlanResult)
+    assert plan.question_type in {"strategy", "track_record"}
+    assert plan.retrieval_strategy == "hybrid"
+    assert plan.needs_examples is True
+    assert plan.needs_quantitative_support is True

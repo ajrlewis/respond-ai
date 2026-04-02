@@ -152,3 +152,71 @@ def score_cost_efficiency(*, total_tokens: int, estimated_cost_usd: float | None
             "total_tokens": total_tokens,
         },
     )
+
+
+def score_planning_quality(
+    *,
+    has_retrieval_plan: bool,
+    planner_sub_question_count: int,
+    retrieval_strategy_used: str | None,
+) -> MetricResult:
+    """Score whether structured pre-retrieval planning artifacts were produced."""
+
+    strategy = (retrieval_strategy_used or "").strip().lower()
+    has_strategy = strategy in {"semantic", "keyword", "hybrid"}
+    base = 0.15
+    if has_retrieval_plan:
+        base += 0.55
+    if planner_sub_question_count > 0:
+        base += min(0.2, planner_sub_question_count * 0.05)
+    if has_strategy:
+        base += 0.1
+
+    score = clamp_score(base)
+    passed = has_retrieval_plan and planner_sub_question_count > 0 and has_strategy
+    return MetricResult(
+        name="planning_quality",
+        score=score,
+        passed=passed,
+        details={
+            "has_retrieval_plan": has_retrieval_plan,
+            "planner_sub_question_count": planner_sub_question_count,
+            "retrieval_strategy_used": retrieval_strategy_used,
+        },
+    )
+
+
+def score_evidence_readiness(
+    *,
+    evidence_coverage: str | None,
+    recommended_action: str | None,
+    missing_information_count: int,
+    retrieval_retry_count: int,
+    has_final_answer: bool,
+) -> MetricResult:
+    """Score whether evidence evaluation outcomes were handled in a controlled way."""
+
+    coverage = (evidence_coverage or "").strip().lower()
+    action = (recommended_action or "").strip().lower()
+    coverage_score = {"strong": 1.0, "partial": 0.7, "weak": 0.3}.get(coverage, 0.45)
+
+    penalty = min(0.2, max(0, missing_information_count) * 0.04)
+    if action == "retrieve_more" and has_final_answer:
+        penalty += 0.1
+
+    retry_bonus = 0.05 if retrieval_retry_count > 0 and coverage in {"strong", "partial"} else 0.0
+    score = clamp_score(coverage_score - penalty + retry_bonus)
+
+    passed = coverage in {"strong", "partial"} and action in {"proceed", "proceed_with_caveats"}
+    return MetricResult(
+        name="evidence_readiness",
+        score=score,
+        passed=passed,
+        details={
+            "coverage": evidence_coverage,
+            "recommended_action": recommended_action,
+            "missing_information_count": missing_information_count,
+            "retrieval_retry_count": retrieval_retry_count,
+            "has_final_answer": has_final_answer,
+        },
+    )

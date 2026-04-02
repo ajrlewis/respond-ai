@@ -160,6 +160,16 @@ class EvalRunner:
         num_cited_chunks = metrics_row.num_cited_chunks if metrics_row is not None else self._derive_cited_count(session)
         total_tokens = metrics_row.total_tokens if metrics_row is not None else int(llm_agg[0] or 0)
         estimated_cost = metrics_row.estimated_cost_usd if metrics_row is not None else float(llm_agg[1] or 0.0)
+        retrieval_plan = getattr(session, "retrieval_plan_payload", {}) or {}
+        evidence_evaluation = getattr(session, "evidence_evaluation_payload", {}) or {}
+        confidence_payload = getattr(session, "confidence_payload", {}) or {}
+
+        sub_questions = retrieval_plan.get("sub_questions", []) if isinstance(retrieval_plan, dict) else []
+        missing_information = (
+            evidence_evaluation.get("missing_information", [])
+            if isinstance(evidence_evaluation, dict)
+            else []
+        )
 
         input_record = SessionEvalInput(
             session_id=str(session.id),
@@ -173,6 +183,27 @@ class EvalRunner:
             time_to_approval_ms=metrics_row.time_to_approval_ms if metrics_row is not None else None,
             total_tokens=int(total_tokens or 0),
             estimated_cost_usd=(float(estimated_cost) if estimated_cost is not None else None),
+            has_retrieval_plan=isinstance(retrieval_plan, dict) and bool(retrieval_plan),
+            planner_sub_question_count=len([item for item in sub_questions if isinstance(item, str) and item.strip()]),
+            retrieval_strategy_used=(
+                str(getattr(session, "retrieval_strategy_used", "")).strip()
+                or str(confidence_payload.get("retrieval_strategy", "")).strip()
+                or None
+            ),
+            evidence_coverage=(
+                str(evidence_evaluation.get("coverage", "")).strip()
+                if isinstance(evidence_evaluation, dict)
+                else None
+            ),
+            recommended_action=(
+                str(evidence_evaluation.get("recommended_action", "")).strip()
+                if isinstance(evidence_evaluation, dict)
+                else None
+            ),
+            missing_information_count=len(
+                [item for item in missing_information if isinstance(item, str) and item.strip()]
+            ),
+            retrieval_retry_count=int(getattr(session, "retry_count", 0) or 0),
         )
 
         score = evaluate_session(input_record)

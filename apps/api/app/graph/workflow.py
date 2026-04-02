@@ -5,7 +5,7 @@ import logging
 from langgraph.graph import END, START, StateGraph
 
 from app.graph.nodes import WorkflowNodes
-from app.graph.router import route_review
+from app.graph.router import route_evidence_evaluation, route_review
 from app.graph.state import WorkflowState
 
 logger = logging.getLogger(__name__)
@@ -18,9 +18,9 @@ def build_workflow(nodes: WorkflowNodes, checkpointer) -> object:
     builder = StateGraph(WorkflowState)
 
     builder.add_node("ask", nodes.ask)
-    builder.add_node("classify_question", nodes.classify_question)
-    builder.add_node("retrieve_evidence", nodes.retrieve_evidence)
-    builder.add_node("cross_reference_evidence", nodes.cross_reference_evidence)
+    builder.add_node("classify_and_plan", nodes.classify_and_plan)
+    builder.add_node("adaptive_retrieve", nodes.adaptive_retrieve)
+    builder.add_node("evaluate_evidence", nodes.evaluate_evidence)
     builder.add_node("draft_response", nodes.draft_response)
     builder.add_node("polish_response", nodes.polish_response)
     builder.add_node("human_review", nodes.human_review)
@@ -28,10 +28,17 @@ def build_workflow(nodes: WorkflowNodes, checkpointer) -> object:
     builder.add_node("finalize_response", nodes.finalize_response)
 
     builder.add_edge(START, "ask")
-    builder.add_edge("ask", "classify_question")
-    builder.add_edge("classify_question", "retrieve_evidence")
-    builder.add_edge("retrieve_evidence", "cross_reference_evidence")
-    builder.add_edge("cross_reference_evidence", "draft_response")
+    builder.add_edge("ask", "classify_and_plan")
+    builder.add_edge("classify_and_plan", "adaptive_retrieve")
+    builder.add_edge("adaptive_retrieve", "evaluate_evidence")
+    builder.add_conditional_edges(
+        "evaluate_evidence",
+        route_evidence_evaluation,
+        {
+            "retrieve_more": "adaptive_retrieve",
+            "proceed": "draft_response",
+        },
+    )
     builder.add_edge("draft_response", "polish_response")
     builder.add_edge("polish_response", "human_review")
     builder.add_conditional_edges(

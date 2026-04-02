@@ -11,10 +11,18 @@ class WorkflowState(TypedDict, total=False):
     question_text: str
     question_type: str
     classification: dict
+    retrieval_plan: dict
+    retrieval_strategy_used: str
+    retrieval_debug: dict
+    retry_count: int
     tone: Literal["concise", "detailed", "formal"]
     current_node: str
+    retrieved_chunks: list[dict]
     retrieved_evidence: list[dict]
+    selected_evidence: list[dict]
+    rejected_evidence: list[dict]
     curated_evidence: list[dict]
+    evidence_evaluation: dict
     evidence_synthesis: dict
     draft_answer: str
     draft_origin: Literal["initial", "revision"]

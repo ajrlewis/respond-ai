@@ -31,6 +31,9 @@ def test_async_api_and_graph_entrypoints() -> None:
 
 def test_async_graph_nodes_and_services() -> None:
     assert inspect.iscoroutinefunction(WorkflowNodes.ask)
+    assert inspect.iscoroutinefunction(WorkflowNodes.classify_and_plan)
+    assert inspect.iscoroutinefunction(WorkflowNodes.adaptive_retrieve)
+    assert inspect.iscoroutinefunction(WorkflowNodes.evaluate_evidence)
     assert inspect.iscoroutinefunction(WorkflowNodes.classify_question)
     assert inspect.iscoroutinefunction(WorkflowNodes.retrieve_evidence)
     assert inspect.iscoroutinefunction(WorkflowNodes.cross_reference_evidence)

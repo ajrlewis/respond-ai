@@ -25,6 +25,12 @@ export type Confidence = {
   model_notes: string;
   retrieval_notes: string;
   evidence_gaps: string[];
+  retrieval_strategy?: string | null;
+  coverage?: "strong" | "partial" | "weak" | "unknown";
+  recommended_action?: "proceed" | "proceed_with_caveats" | "retrieve_more" | "unknown";
+  selected_chunk_ids?: string[];
+  rejected_chunk_ids?: string[];
+  notes_for_drafting?: string[];
 };
 
 export type AnswerVersion = {
@@ -64,6 +70,8 @@ export type Session = {
   tone: Tone;
   status: SessionStatus;
   current_node: string | null;
+  retrieval_strategy_used?: string | null;
+  retry_count?: number;
   draft_answer: string | null;
   final_answer: string | null;
   final_version_number: number | null;
@@ -76,6 +84,8 @@ export type Session = {
   evidence_gaps_acknowledged_at: string | null;
   confidence_notes: string | null;
   confidence: Confidence;
+  retrieval_plan?: Record<string, unknown>;
+  evidence_evaluation?: Record<string, unknown>;
   evidence: EvidenceItem[];
   answer_versions: AnswerVersion[];
   final_audit: Record<string, unknown>;

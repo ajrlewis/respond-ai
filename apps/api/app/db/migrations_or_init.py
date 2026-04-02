@@ -19,11 +19,28 @@ def init_database() -> None:
         connection.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         Base.metadata.create_all(bind=connection)
         connection.execute(text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS current_node VARCHAR(64)"))
+        connection.execute(text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS retrieval_strategy_used VARCHAR(32)"))
+        connection.execute(text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0"))
         connection.execute(
             text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS confidence_payload JSONB DEFAULT '{}'::jsonb")
         )
         connection.execute(
+            text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS retrieval_plan_payload JSONB DEFAULT '{}'::jsonb")
+        )
+        connection.execute(
+            text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS retrieval_metadata_payload JSONB DEFAULT '{}'::jsonb")
+        )
+        connection.execute(
+            text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS evidence_evaluation_payload JSONB DEFAULT '{}'::jsonb")
+        )
+        connection.execute(
             text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS answer_versions_payload JSONB DEFAULT '[]'::jsonb")
+        )
+        connection.execute(
+            text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS selected_evidence_payload JSONB DEFAULT '[]'::jsonb")
+        )
+        connection.execute(
+            text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS rejected_evidence_payload JSONB DEFAULT '[]'::jsonb")
         )
         connection.execute(text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS final_version_number INTEGER"))
         connection.execute(text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ"))
@@ -83,11 +100,28 @@ async def init_database_async() -> None:
         await connection.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         await connection.run_sync(Base.metadata.create_all)
         await connection.execute(text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS current_node VARCHAR(64)"))
+        await connection.execute(text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS retrieval_strategy_used VARCHAR(32)"))
+        await connection.execute(text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0"))
         await connection.execute(
             text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS confidence_payload JSONB DEFAULT '{}'::jsonb")
         )
         await connection.execute(
+            text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS retrieval_plan_payload JSONB DEFAULT '{}'::jsonb")
+        )
+        await connection.execute(
+            text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS retrieval_metadata_payload JSONB DEFAULT '{}'::jsonb")
+        )
+        await connection.execute(
+            text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS evidence_evaluation_payload JSONB DEFAULT '{}'::jsonb")
+        )
+        await connection.execute(
             text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS answer_versions_payload JSONB DEFAULT '[]'::jsonb")
+        )
+        await connection.execute(
+            text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS selected_evidence_payload JSONB DEFAULT '[]'::jsonb")
+        )
+        await connection.execute(
+            text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS rejected_evidence_payload JSONB DEFAULT '[]'::jsonb")
         )
         await connection.execute(text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS final_version_number INTEGER"))
         await connection.execute(text("ALTER TABLE rfp_sessions ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ"))

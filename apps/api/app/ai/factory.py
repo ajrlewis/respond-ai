@@ -11,7 +11,9 @@ from app.core.config import settings
 
 ModelPurpose = Literal[
     "classification",
+    "planning",
     "cross_reference",
+    "evidence_evaluation",
     "drafting",
     "revision",
     "evaluation",
@@ -110,6 +112,8 @@ def validate_ai_configuration() -> None:
 
     specs = [
         resolve_chat_spec(purpose="classification"),
+        resolve_chat_spec(purpose="planning"),
+        resolve_chat_spec(purpose="evidence_evaluation"),
         resolve_chat_spec(purpose="drafting"),
         resolve_chat_spec(purpose="revision"),
         resolve_embedding_spec(),

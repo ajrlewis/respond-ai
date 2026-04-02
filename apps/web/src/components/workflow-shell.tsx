@@ -71,10 +71,16 @@ function nodeProgressLabel(session: Session | null): string {
   switch (session.current_node) {
     case "ask":
       return "Initializing workflow...";
+    case "classify_and_plan":
+      return "Planning retrieval...";
     case "classify_question":
       return "Classifying question...";
+    case "adaptive_retrieve":
+      return "Retrieving evidence adaptively...";
     case "retrieve_evidence":
       return "Retrieving evidence...";
+    case "evaluate_evidence":
+      return "Evaluating evidence sufficiency...";
     case "cross_reference_evidence":
       return "Cross-checking evidence...";
     case "draft_response":
@@ -857,6 +863,12 @@ export function WorkflowShell() {
                     <span>
                       Evidence coverage: {citationCount}/{session.evidence.length} cited chunks
                     </span>
+                    {session.confidence.retrieval_strategy ? (
+                      <span>Retrieval strategy: {session.confidence.retrieval_strategy}</span>
+                    ) : null}
+                    {session.confidence.coverage && session.confidence.coverage !== "unknown" ? (
+                      <span>Evaluator coverage: {session.confidence.coverage}</span>
+                    ) : null}
                   </div>
                   <div className="review-notes-block">
                     <p>
@@ -865,6 +877,11 @@ export function WorkflowShell() {
                     <p>
                       <strong>Retrieval notes:</strong> {session.confidence.retrieval_notes || "No retrieval notes provided."}
                     </p>
+                    {session.confidence.recommended_action && session.confidence.recommended_action !== "unknown" ? (
+                      <p>
+                        <strong>Evaluator recommendation:</strong> {session.confidence.recommended_action}
+                      </p>
+                    ) : null}
                   </div>
                 </DisclosurePanel>
 

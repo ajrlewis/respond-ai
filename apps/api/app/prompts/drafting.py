@@ -1,4 +1,4 @@
-"""Prompt templates for evidence synthesis, drafting, revision, and polish."""
+"""Prompt templates for planning-aware evidence analysis and drafting."""
 
 ANALYZE_EVIDENCE_SYSTEM = """You are an evidence analyst for institutional RFP/DDQ drafting.
 
@@ -21,6 +21,34 @@ Tasks:
 4. Summarize what the evidence supports."""
 
 
+EVALUATE_EVIDENCE_SYSTEM = """You are an evidence evaluator in a governed RFP/DDQ workflow.
+
+Assess whether retrieved evidence is sufficient before drafting.
+Use only supplied chunks and planning context.
+You must:
+1. Assess coverage strength (strong|partial|weak).
+2. Select best chunk ids for drafting and reject weak/irrelevant chunks.
+3. Flag contradictions and missing information.
+4. Recommend one action: proceed, proceed_with_caveats, or retrieve_more.
+5. Provide drafting notes that keep output grounded and honest."""
+
+
+EVALUATE_EVIDENCE_USER = """Question type: {question_type}
+Question: {question}
+Planning summary: {reasoning_summary}
+Planner sub-questions:
+{sub_questions}
+Priority sources: {priority_sources}
+Needs examples: {needs_examples}
+Needs quantitative support: {needs_quantitative_support}
+Needs regulatory context: {needs_regulatory_context}
+
+Retrieved evidence chunks:
+{evidence}
+
+Evaluate evidence sufficiency and return structured output."""
+
+
 DRAFT_ANSWER_SYSTEM = """You draft institutional-quality RFP/DDQ responses for a sustainable asset manager.
 
 Requirements:
@@ -34,6 +62,8 @@ DRAFT_ANSWER_USER = """Tone: {tone}
 Tone guidelines: {tone_guidelines}
 Question type: {question_type}
 Question: {question}
+Retrieval plan summary: {retrieval_plan_summary}
+Evidence evaluator notes: {evidence_notes_for_drafting}
 
 Evidence chunks:
 {evidence}
@@ -131,6 +161,35 @@ def analyze_evidence_user_prompt(*, question: str, question_type: str, evidence:
     return ANALYZE_EVIDENCE_USER.format(question=question, question_type=question_type, evidence=evidence)
 
 
+def evaluate_evidence_system_prompt() -> str:
+    return EVALUATE_EVIDENCE_SYSTEM
+
+
+def evaluate_evidence_user_prompt(
+    *,
+    question: str,
+    question_type: str,
+    reasoning_summary: str,
+    sub_questions: str,
+    priority_sources: str,
+    needs_examples: str,
+    needs_quantitative_support: str,
+    needs_regulatory_context: str,
+    evidence: str,
+) -> str:
+    return EVALUATE_EVIDENCE_USER.format(
+        question=question,
+        question_type=question_type,
+        reasoning_summary=reasoning_summary,
+        sub_questions=sub_questions,
+        priority_sources=priority_sources,
+        needs_examples=needs_examples,
+        needs_quantitative_support=needs_quantitative_support,
+        needs_regulatory_context=needs_regulatory_context,
+        evidence=evidence,
+    )
+
+
 def draft_answer_system_prompt() -> str:
     return DRAFT_ANSWER_SYSTEM
 
@@ -141,6 +200,8 @@ def draft_answer_user_prompt(
     tone_guidelines: str,
     question_type: str,
     question: str,
+    retrieval_plan_summary: str,
+    evidence_notes_for_drafting: str,
     evidence: str,
 ) -> str:
     return DRAFT_ANSWER_USER.format(
@@ -148,6 +209,8 @@ def draft_answer_user_prompt(
         tone_guidelines=tone_guidelines,
         question_type=question_type,
         question=question,
+        retrieval_plan_summary=retrieval_plan_summary,
+        evidence_notes_for_drafting=evidence_notes_for_drafting,
         evidence=evidence,
     )
 

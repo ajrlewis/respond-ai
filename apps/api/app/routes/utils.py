@@ -11,6 +11,14 @@ def session_to_schema(session: RFPSession) -> SessionOut:
 
     evidence_items = []
     for item in session.evidence_payload or []:
+        metadata = item.get("metadata", {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+        metadata = {
+            **metadata,
+            "selected_for_drafting": bool(item.get("selected_for_drafting", False)),
+            "rejected_by_evaluator": bool(item.get("rejected_by_evaluator", False)),
+        }
         evidence_items.append(
             EvidenceChunk(
                 chunk_id=item["chunk_id"],
@@ -22,7 +30,7 @@ def session_to_schema(session: RFPSession) -> SessionOut:
                 score=item["score"],
                 retrieval_method=item["retrieval_method"],
                 excluded_by_reviewer=bool(item.get("excluded_by_reviewer", False)),
-                metadata=item.get("metadata", {}),
+                metadata=metadata,
             )
         )
 
@@ -42,6 +50,8 @@ def session_to_schema(session: RFPSession) -> SessionOut:
         tone=session.tone,
         status=session.status,
         current_node=session.current_node,
+        retrieval_strategy_used=getattr(session, "retrieval_strategy_used", None),
+        retry_count=int(getattr(session, "retry_count", 0) or 0),
         draft_answer=session.draft_answer,
         final_answer=session.final_answer,
         final_version_number=getattr(session, "final_version_number", None),
@@ -54,6 +64,8 @@ def session_to_schema(session: RFPSession) -> SessionOut:
         evidence_gaps_acknowledged_at=getattr(session, "evidence_gaps_acknowledged_at", None),
         confidence_notes=session.confidence_notes,
         confidence=confidence,
+        retrieval_plan=getattr(session, "retrieval_plan_payload", {}) or {},
+        evidence_evaluation=getattr(session, "evidence_evaluation_payload", {}) or {},
         evidence=evidence_items,
         answer_versions=answer_versions,
         final_audit=getattr(session, "final_audit_payload", {}) or {},
