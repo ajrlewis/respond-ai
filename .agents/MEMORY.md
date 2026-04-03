@@ -78,3 +78,4 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - Offline eval runner command is `cd apps/api && uv run python scripts/run_evals.py --limit 50`.
 - Eval API endpoints are `POST /api/evals/run`, `GET /api/evals/runs`, and `GET /api/evals/runs/{run_id}`.
 - Graph node implementations are split under `apps/api/app/graph/nodes/` as thin orchestration adapters; planning, evidence analysis, drafting/revision/polish, and finalization business logic live in `apps/api/app/services/{planning,evidence_analysis,drafting,finalization}.py`.
+- Web workflow UI is organized under `apps/web/src/components/workflow/` with orchestration hooks in `apps/web/src/hooks/use-workflow.ts` and `apps/web/src/hooks/use-draft-history.ts`; `apps/web/src/components/workflow-shell.tsx` is a thin re-export to the workflow container.
