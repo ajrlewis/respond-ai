@@ -9,14 +9,13 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.ai.chat import get_structured_model
-from app.ai.providers import AIConfigurationError, AIProviderError
+from app.ai import AIConfigurationError, AIProviderError, get_structured_model
 from app.ai.schemas import LLMJudgeEvalResult
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.db.models import EvalResult, EvalRun, LLMCall, RFPReview, RFPSession, SessionMetric
 from app.evals.evaluators import SessionEvalInput, SessionEvalScore, evaluate_session
-from app.prompts.evals import eval_judge_system_prompt, eval_judge_user_prompt
+from app.prompts import load_system_prompt, render_user_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -269,17 +268,20 @@ class EvalRunner:
         try:
             judge = get_structured_model(schema=LLMJudgeEvalResult, purpose="evaluation")
             return await judge.ainvoke(
-                system_prompt=eval_judge_system_prompt(),
-                user_prompt=eval_judge_user_prompt(
-                    session_id=record.session_id,
-                    approved=record.approved,
-                    question_type=str(getattr(session, "question_type", "") or "other"),
-                    final_answer=str(getattr(session, "final_answer", "") or ""),
-                    num_retrieved_chunks=record.num_retrieved_chunks,
-                    num_cited_chunks=record.num_cited_chunks,
-                    num_revision_rounds=record.num_revision_rounds,
-                    total_tokens=record.total_tokens,
-                    estimated_cost_usd=record.estimated_cost_usd,
+                system_prompt=load_system_prompt("eval_judge"),
+                user_prompt=render_user_prompt(
+                    "eval_judge",
+                    {
+                        "session_id": record.session_id,
+                        "approved": record.approved,
+                        "question_type": str(getattr(session, "question_type", "") or "other"),
+                        "final_answer": str(getattr(session, "final_answer", "") or ""),
+                        "num_retrieved_chunks": record.num_retrieved_chunks,
+                        "num_cited_chunks": record.num_cited_chunks,
+                        "num_revision_rounds": record.num_revision_rounds,
+                        "total_tokens": record.total_tokens,
+                        "estimated_cost_usd": record.estimated_cost_usd,
+                    },
                 ),
                 temperature=0,
             )

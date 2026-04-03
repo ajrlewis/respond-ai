@@ -722,6 +722,12 @@ export function WorkflowShell() {
         evidenceGapsAcknowledged: isGapAcknowledged,
       });
       setSession(next);
+      // After a successful redraft, keep the UI pinned to the latest current draft
+      // so reviewer actions remain available without manual version reselection.
+      setSelectedDraftId(null);
+      setCompareEnabled(false);
+      setCompareDraftId("");
+      setCompareSegments([]);
       setRevisionProgress(nodeProgressLabel(next));
       setFeedback("");
       setReviewMode("none");

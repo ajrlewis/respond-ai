@@ -1,4 +1,4 @@
-"""Backward-compatible LLM service built on provider-agnostic AI layer."""
+"""Deprecated compatibility shim over the centralized app.ai model layer."""
 
 from __future__ import annotations
 
@@ -7,13 +7,13 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
-from app.ai.chat import get_chat_model, get_structured_model
+from app.ai import get_chat_model, get_structured_model
 
 StructuredOutputT = TypeVar("StructuredOutputT", bound=BaseModel)
 
 
 class LLMService:
-    """Compatibility wrapper around new purpose-based chat model clients."""
+    """Compatibility wrapper; model/provider ownership lives in `app.ai`."""
 
     @staticmethod
     def _purpose(purpose: str) -> str:

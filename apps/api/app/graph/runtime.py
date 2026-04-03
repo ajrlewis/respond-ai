@@ -31,6 +31,12 @@ def _build_graph(checkpointer):
     return build_workflow(nodes=nodes, checkpointer=checkpointer)
 
 
+def _checkpointer_conn_string() -> str:
+    """Return PostgresSaver-compatible connection string from `DATABASE_URL`."""
+
+    return settings.database_url.replace("+psycopg", "")
+
+
 async def run_until_human_review(payload: dict, thread_id: str) -> dict:
     """Run workflow from start until the human-review interrupt is reached."""
 
@@ -52,7 +58,7 @@ async def run_until_human_review(payload: dict, thread_id: str) -> dict:
     session_id_for_metrics: str | None = None
 
     try:
-        async with AsyncPostgresSaver.from_conn_string(settings.checkpoint_url) as checkpointer:
+        async with AsyncPostgresSaver.from_conn_string(_checkpointer_conn_string()) as checkpointer:
             await checkpointer.setup()
             graph = _build_graph(checkpointer)
             result = await graph.ainvoke(payload, config={"configurable": {"thread_id": thread_id}})
@@ -103,7 +109,7 @@ async def resume_from_review(thread_id: str, review_payload: dict) -> dict:
     session_id_for_metrics = str(review_payload.get("session_id", "") or "") or None
 
     try:
-        async with AsyncPostgresSaver.from_conn_string(settings.checkpoint_url) as checkpointer:
+        async with AsyncPostgresSaver.from_conn_string(_checkpointer_conn_string()) as checkpointer:
             await checkpointer.setup()
             graph = _build_graph(checkpointer)
             result = await graph.ainvoke(

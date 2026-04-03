@@ -1,4 +1,4 @@
-"""Typed AI structured-output schemas."""
+"""Structured LLM-output schemas used by `app.ai` model calls."""
 
 from app.ai.schemas.classification import (
     EvidenceEvaluationResult,

@@ -40,10 +40,6 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://respondai:respondai@localhost:5432/respondai",
         description="Primary Postgres database URL.",
     )
-    checkpoint_database_url: str | None = Field(
-        default=None,
-        description="Optional dedicated database URL for LangGraph checkpoints.",
-    )
 
     ai_provider: str = Field(default="openai", description="Default AI provider (openai|anthropic|google).")
 
@@ -76,12 +72,6 @@ class Settings(BaseSettings):
 
     retrieval_top_k: int = 10
     final_evidence_k: int = 6
-
-    @property
-    def checkpoint_url(self) -> str:
-        if self.checkpoint_database_url:
-            return self.checkpoint_database_url
-        return self.database_url.replace("+psycopg", "")
 
 
 @lru_cache(maxsize=1)

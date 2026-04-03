@@ -3,9 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Any
 
-from app.ai.providers.base import ProviderUsage
+
+@dataclass(slots=True)
+class ProviderUsage:
+    """Normalized usage shape across providers."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    normalized_input_tokens: int = 0
+    normalized_output_tokens: int = 0
+    raw_usage_payload: dict[str, Any] = field(default_factory=dict)
 
 
 def estimate_text_tokens(text: str) -> int:

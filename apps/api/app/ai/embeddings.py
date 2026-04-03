@@ -1,4 +1,4 @@
-"""Provider-agnostic embedding model clients with telemetry logging."""
+"""Embedding model clients built on thin provider/model factory wiring."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ import logging
 from time import perf_counter
 from typing import Any
 
-from app.ai.factory import resolve_embedding_spec
-from app.ai.providers import AIConfigurationError
-from app.ai.registry import get_provider_registry
+from app.ai.errors import AIConfigurationError, AIProviderError
+from app.ai.factory import EMBEDDING_PROVIDERS, normalize_provider_name, resolve_embedding_spec
+from app.ai.usage import estimate_texts_tokens, normalize_usage_payload
 from app.core.config import settings
 from app.services.observability import (
     LLMLogRecord,
@@ -31,11 +31,17 @@ def _run_with_retry_sync(operation, *, provider: str) -> Any:
             return operation()
         except AIConfigurationError:
             raise
-        except Exception:
+        except Exception as exc:
             attempt += 1
             if attempt > max_retries:
                 raise
-            logger.warning("Retrying sync embedding call provider=%s attempt=%d/%d", provider, attempt, max_retries)
+            logger.warning(
+                "Retrying sync embedding call provider=%s attempt=%d/%d error=%s",
+                provider,
+                attempt,
+                max_retries,
+                exc,
+            )
 
 
 async def _run_with_retry_async(operation, *, provider: str) -> Any:
@@ -47,11 +53,65 @@ async def _run_with_retry_async(operation, *, provider: str) -> Any:
             return await asyncio.wait_for(operation(), timeout=timeout_seconds)
         except AIConfigurationError:
             raise
-        except Exception:
+        except Exception as exc:
             attempt += 1
             if attempt > max_retries:
                 raise
-            logger.warning("Retrying async embedding call provider=%s attempt=%d/%d", provider, attempt, max_retries)
+            logger.warning(
+                "Retrying async embedding call provider=%s attempt=%d/%d error=%s",
+                provider,
+                attempt,
+                max_retries,
+                exc,
+            )
+
+
+def _provider_api_key(provider: str) -> str:
+    if provider == "openai":
+        return settings.openai_api_key.strip()
+    if provider == "google":
+        return settings.google_api_key.strip()
+    return ""
+
+
+def _require_api_key(provider: str) -> str:
+    key = _provider_api_key(provider)
+    if key:
+        return key
+    setting = "OPENAI_API_KEY" if provider == "openai" else "GOOGLE_API_KEY"
+    raise AIConfigurationError(f"{setting} is required when using provider={provider} for embeddings.")
+
+
+def build_embedding_backend(*, provider: str, model: str) -> Any:
+    """Instantiate LangChain embedding adapter for a provider/model."""
+
+    normalized = normalize_provider_name(provider)
+    if normalized not in EMBEDDING_PROVIDERS:
+        raise AIConfigurationError(
+            "Anthropic does not provide embeddings in this stack. Configure EMBEDDING_PROVIDER to openai or google."
+        )
+
+    if normalized == "openai":
+        try:
+            from langchain_openai import OpenAIEmbeddings
+        except ImportError as exc:  # pragma: no cover - dependency guard
+            raise AIConfigurationError(
+                "langchain-openai is not installed. Add it to API dependencies to use OpenAI embeddings."
+            ) from exc
+        return OpenAIEmbeddings(model=model, api_key=_require_api_key("openai"))
+
+    if normalized == "google":
+        try:
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+        except ImportError as exc:  # pragma: no cover - dependency guard
+            raise AIConfigurationError(
+                "langchain-google-genai is not installed. Add it to API dependencies to use Google embeddings."
+            ) from exc
+        return GoogleGenerativeAIEmbeddings(model=model, google_api_key=_require_api_key("google"))
+
+    raise AIConfigurationError(
+        f"Unsupported embedding provider '{normalized}'. Supported providers: {', '.join(sorted(EMBEDDING_PROVIDERS))}."
+    )
 
 
 @dataclass(slots=True)
@@ -81,7 +141,7 @@ class EmbeddingModelClient:
         if not texts:
             return []
 
-        provider_impl = get_provider_registry().get(self.provider)
+        backend = build_embedding_backend(provider=self.provider, model=self.model)
         started = perf_counter()
         status = "success"
         error_message: str | None = None
@@ -94,18 +154,26 @@ class EmbeddingModelClient:
         raw_usage_payload: dict[str, Any] = {}
 
         try:
-            result = _run_with_retry_sync(
-                lambda: provider_impl.embed_texts(model=self.model, texts=texts),
-                provider=self.provider,
+            try:
+                vectors = _run_with_retry_sync(lambda: backend.embed_documents(texts), provider=self.provider)
+            except Exception as exc:
+                raise AIProviderError(f"{self.provider} embeddings failed: {exc}") from exc
+
+            usage = normalize_usage_payload(
+                {},
+                input_fallback_tokens=estimate_texts_tokens(texts),
+                output_fallback_tokens=0,
             )
-            response_payload = result.response_payload
-            input_tokens = result.usage.input_tokens
-            output_tokens = result.usage.output_tokens
-            total_tokens = result.usage.total_tokens
-            normalized_input_tokens = result.usage.normalized_input_tokens
-            normalized_output_tokens = result.usage.normalized_output_tokens
-            raw_usage_payload = result.usage.raw_usage_payload
-            return result.vectors
+            input_tokens = usage.input_tokens
+            output_tokens = usage.output_tokens
+            total_tokens = usage.total_tokens
+            normalized_input_tokens = usage.normalized_input_tokens
+            normalized_output_tokens = usage.normalized_output_tokens
+            response_payload = {
+                "embedding_count": len(vectors),
+                "vector_dimensions": len(vectors[0]) if vectors else 0,
+            }
+            return vectors
         except Exception as exc:
             status = "error"
             error_message = str(exc)
@@ -163,7 +231,7 @@ class EmbeddingModelClient:
         if not texts:
             return []
 
-        provider_impl = get_provider_registry().get(self.provider)
+        backend = build_embedding_backend(provider=self.provider, model=self.model)
         started = perf_counter()
         status = "success"
         error_message: str | None = None
@@ -176,18 +244,31 @@ class EmbeddingModelClient:
         raw_usage_payload: dict[str, Any] = {}
 
         try:
-            result = await _run_with_retry_async(
-                lambda: provider_impl.aembed_texts(model=self.model, texts=texts),
-                provider=self.provider,
+            async def _invoke() -> list[list[float]]:
+                if hasattr(backend, "aembed_documents"):
+                    return await backend.aembed_documents(texts)
+                return await asyncio.to_thread(backend.embed_documents, texts)
+
+            try:
+                vectors = await _run_with_retry_async(_invoke, provider=self.provider)
+            except Exception as exc:
+                raise AIProviderError(f"{self.provider} async embeddings failed: {exc}") from exc
+
+            usage = normalize_usage_payload(
+                {},
+                input_fallback_tokens=estimate_texts_tokens(texts),
+                output_fallback_tokens=0,
             )
-            response_payload = result.response_payload
-            input_tokens = result.usage.input_tokens
-            output_tokens = result.usage.output_tokens
-            total_tokens = result.usage.total_tokens
-            normalized_input_tokens = result.usage.normalized_input_tokens
-            normalized_output_tokens = result.usage.normalized_output_tokens
-            raw_usage_payload = result.usage.raw_usage_payload
-            return result.vectors
+            input_tokens = usage.input_tokens
+            output_tokens = usage.output_tokens
+            total_tokens = usage.total_tokens
+            normalized_input_tokens = usage.normalized_input_tokens
+            normalized_output_tokens = usage.normalized_output_tokens
+            response_payload = {
+                "embedding_count": len(vectors),
+                "vector_dimensions": len(vectors[0]) if vectors else 0,
+            }
+            return vectors
         except Exception as exc:
             status = "error"
             error_message = str(exc)
@@ -233,4 +314,4 @@ def get_embedding_model() -> EmbeddingModelClient:
     return EmbeddingModelClient(provider=spec.provider, model=spec.model)
 
 
-__all__ = ["EmbeddingModelClient", "get_embedding_model"]
+__all__ = ["EmbeddingModelClient", "build_embedding_backend", "get_embedding_model"]

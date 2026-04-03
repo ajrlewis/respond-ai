@@ -1,7 +1,7 @@
 import pytest
 
 from app.ai.factory import resolve_chat_spec, resolve_embedding_spec, validate_ai_configuration
-from app.ai.providers import AIConfigurationError
+from app.ai.errors import AIConfigurationError
 from app.core.config import Settings
 
 

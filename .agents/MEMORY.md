@@ -51,13 +51,14 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - API service in `docker-compose.yml` sets `security_opt: [seccomp=unconfined]`, mounts `./data` to `/app/data` read-only, and pins BLAS thread env vars to 1 for restrictive Docker hosts.
 - Seed ingestion command is `cd apps/api && uv run python scripts/seed_data.py`.
 - API settings load `.env` from `apps/api/.env` first, then repo-root `.env` as fallback.
-- Local DB URLs use `DATABASE_URL` / `CHECKPOINT_DATABASE_URL`; Docker API container uses `DOCKER_DATABASE_URL` / `DOCKER_CHECKPOINT_DATABASE_URL`.
+- Database connectivity is configured with a single `DATABASE_URL` for API, SQLAlchemy sessions, scripts, and LangGraph checkpointer.
 - Docker-first seed command is `docker compose exec -T api uv run python scripts/seed_data.py`.
 - API request handlers use async DB sessions from `app.core.database.get_db` (`AsyncSessionLocal`), while sync `SessionLocal` remains for scripts/seed flows.
 - LangGraph runtime executes asynchronously with `AsyncPostgresSaver` and `graph.ainvoke(...)` in `app/graph/runtime.py`.
-- Prompt definitions are centralized in `apps/api/app/prompts/*.py` and consumed by graph nodes via `render_prompt_template(...)`.
-- AI provider abstraction now lives under `apps/api/app/ai` with purpose-based factory methods `get_chat_model`, `get_structured_model`, and `get_embedding_model`.
+- Prompt assets are centralized in `apps/api/app/prompts/<task>/{system,user}.md` and loaded via `app.prompts.loader`.
+- AI model/provider access is centralized in `apps/api/app/ai` through a thin LangChain-backed factory (`get_chat_model`, `get_structured_model`, `get_embedding_model`) without a custom provider-class hierarchy.
 - Provider/model routing is environment-driven (`AI_PROVIDER`, `LARGE_LLM_PROVIDER`, `SMALL_LLM_PROVIDER`, `EMBEDDING_PROVIDER`) with optional eval judge routing (`EVAL_LLM_PROVIDER`, `EVAL_LLM_MODEL`).
+- Schema boundary convention: `apps/api/app/ai/schemas` is for structured LLM outputs; `apps/api/app/schemas` is for API/application/persistence contracts.
 - LangGraph flow inserts `polish_response` after both `draft_response` and `revise_response` to enforce final investor-tone cleanup before `human_review`.
 - API logging level is configured via `LOGGING_LEVEL` (default `INFO`) in `apps/api/app/core/config.py` and applied by `app/core/logging.py`.
 - API emits lifecycle/debug logs across routes, graph runtime/nodes, and service/database layers using module loggers (`logging.getLogger(__name__)`).
@@ -76,3 +77,4 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - Observability tables include `graph_runs`, `node_runs`, `tool_runs`, `llm_calls`, and `session_metrics` for workflow/model/token telemetry persisted in Postgres.
 - Offline eval runner command is `cd apps/api && uv run python scripts/run_evals.py --limit 50`.
 - Eval API endpoints are `POST /api/evals/run`, `GET /api/evals/runs`, and `GET /api/evals/runs/{run_id}`.
+- Graph node implementations are split under `apps/api/app/graph/nodes/` as thin orchestration adapters; planning, evidence analysis, drafting/revision/polish, and finalization business logic live in `apps/api/app/services/{planning,evidence_analysis,drafting,finalization}.py`.

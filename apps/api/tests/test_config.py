@@ -7,23 +7,13 @@ def test_database_url_default_targets_localhost() -> None:
     assert settings.database_url == "postgresql+psycopg://respondai:respondai@localhost:5432/respondai"
 
 
-def test_checkpoint_url_defaults_from_database_url() -> None:
+def test_settings_use_single_database_url_field() -> None:
     settings = Settings(
         _env_file=None,
         database_url="postgresql+psycopg://user:pass@localhost:5432/respondai",
     )
-
-    assert settings.checkpoint_url == "postgresql://user:pass@localhost:5432/respondai"
-
-
-def test_checkpoint_url_prefers_explicit_override() -> None:
-    settings = Settings(
-        _env_file=None,
-        database_url="postgresql+psycopg://user:pass@localhost:5432/respondai",
-        checkpoint_database_url="postgresql://other:pass@localhost:5432/respondai_checkpoint",
-    )
-
-    assert settings.checkpoint_url == "postgresql://other:pass@localhost:5432/respondai_checkpoint"
+    dumped = settings.model_dump()
+    assert dumped["database_url"] == "postgresql+psycopg://user:pass@localhost:5432/respondai"
 
 
 def test_logging_level_default_is_info() -> None:

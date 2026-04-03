@@ -52,13 +52,18 @@ respondai/
   - OpenAI
   - Anthropic
   - Google
+- Thin LangChain-backed model factory in `app/ai` (purpose-routed provider/model selection, no custom provider class hierarchy)
 - Purpose-based model routing from env (classification, cross-reference, drafting, revision, evaluation, embeddings)
+- Centralized markdown prompt assets in `apps/api/app/prompts/<task>/{system,user}.md`
 - Structured outputs (Pydantic) for:
   - question classification
   - evidence synthesis/cross-reference
   - draft metadata extraction
   - revision intent extraction
   - optional LLM-judge evals
+- Schema boundaries:
+  - `apps/api/app/ai/schemas`: structured LLM output contracts
+  - `apps/api/app/schemas`: API/application/persistence-facing schemas
 
 ### Frontend (`apps/web`)
 
@@ -205,8 +210,8 @@ cp .env.example .env
 
 2. Set provider keys in `.env` for any providers you configure.
    Default config requires `OPENAI_API_KEY`.
-   `DATABASE_URL` and `CHECKPOINT_DATABASE_URL` are for local runs (`localhost`);
-   Docker uses `DOCKER_DATABASE_URL` and `DOCKER_CHECKPOINT_DATABASE_URL`.
+   The app uses a single database setting: `DATABASE_URL`.
+   Default `.env.example` is Docker-first (`@postgres` host). For non-Docker local runs, set `DATABASE_URL` to `@localhost`.
 
 3. Start the stack:
 
