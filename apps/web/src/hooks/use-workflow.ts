@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   askQuestion,
-  fetchSession,
-  fetchSessionByThreadId,
+  openSessionEventsStream,
+  openThreadEventsStream,
   reviewSession,
   type AnswerVersion,
   type Session,
   type Tone,
+  type WorkflowStateEvent,
 } from "@/lib/api";
 import {
   CONFIDENCE_WARNING_THRESHOLD,
@@ -17,6 +18,8 @@ import {
 } from "@/lib/workflow";
 
 export type ReviewMode = "none" | "revise";
+
+const RECOVERING_STREAM_ERROR = "Live updates disconnected. Reconnecting...";
 
 type ApproveContext = {
   selectedDraft: AnswerVersion | null;
@@ -91,6 +94,10 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
   const [excludedEvidenceKeys, setExcludedEvidenceKeys] = useState<Set<string>>(new Set<string>());
   const [reviewedEvidenceGaps, setReviewedEvidenceGaps] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const eventSourceKeyRef = useRef<string | null>(null);
+  const isGeneratingDraftRef = useRef(false);
+  const isSubmittingRevisionRef = useRef(false);
 
   const canSubmit = question.trim().length >= 10 && !loading;
   const isApproved = session?.status === "approved";
@@ -101,6 +108,81 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
   const isGapAcknowledged = !requiresGapAcknowledgement || reviewedEvidenceGaps;
   const approveWarning = confidenceScore !== null && confidenceScore < CONFIDENCE_WARNING_THRESHOLD;
   const timelineText = useMemo(() => buildTimelineText(session), [session]);
+
+  useEffect(() => {
+    isGeneratingDraftRef.current = isGeneratingDraft;
+  }, [isGeneratingDraft]);
+
+  useEffect(() => {
+    isSubmittingRevisionRef.current = isSubmittingRevision;
+  }, [isSubmittingRevision]);
+
+  const closeWorkflowStream = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    eventSourceKeyRef.current = null;
+  }, []);
+
+  const openWorkflowStream = useCallback(
+    (target: { sessionId?: string; threadId?: string }) => {
+      const sessionId = target.sessionId?.trim();
+      const threadId = target.threadId?.trim();
+      const key = sessionId ? `session:${sessionId}` : threadId ? `thread:${threadId}` : null;
+      if (!key) return;
+
+      if (eventSourceKeyRef.current === key && eventSourceRef.current) {
+        return;
+      }
+
+      closeWorkflowStream();
+      eventSourceKeyRef.current = key;
+      const source = sessionId ? openSessionEventsStream(sessionId) : openThreadEventsStream(threadId!);
+      eventSourceRef.current = source;
+
+      const handleWorkflowState = (event: Event) => {
+        const messageEvent = event as MessageEvent<string>;
+        let payload: WorkflowStateEvent;
+        try {
+          payload = JSON.parse(messageEvent.data) as WorkflowStateEvent;
+        } catch {
+          return;
+        }
+
+        if (payload.error) {
+          setError(payload.error);
+        }
+
+        if (!payload.session) return;
+
+        const nextSession = payload.session;
+        setSession(nextSession);
+
+        if (isGeneratingDraftRef.current) {
+          setGenerationProgress(nodeProgressLabel(nextSession));
+        }
+        if (isSubmittingRevisionRef.current) {
+          setRevisionProgress(nodeProgressLabel(nextSession));
+        }
+
+        if (nextSession.status === "approved") {
+          closeWorkflowStream();
+        }
+      };
+
+      source.addEventListener("workflow_state", handleWorkflowState);
+      source.onopen = () => {
+        setError((previous) => (previous === RECOVERING_STREAM_ERROR ? null : previous));
+      };
+      source.onerror = () => {
+        if (isGeneratingDraftRef.current || isSubmittingRevisionRef.current) {
+          setError((previous) => previous ?? RECOVERING_STREAM_ERROR);
+        }
+      };
+    },
+    [closeWorkflowStream],
+  );
 
   useEffect(() => {
     if (!session) {
@@ -122,6 +204,17 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
     setIsEvidenceGapsExpanded(requiresAck);
   }, [session?.id, session?.updated_at]);
 
+  useEffect(() => {
+    if (!session?.id) return;
+    openWorkflowStream({ sessionId: session.id });
+  }, [openWorkflowStream, session?.id]);
+
+  useEffect(() => {
+    return () => {
+      closeWorkflowStream();
+    };
+  }, [closeWorkflowStream]);
+
   async function handleGenerateDraft(context?: GenerateDraftContext) {
     if (!canSubmit) return;
 
@@ -137,38 +230,23 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
     setIsEvidenceGapsExpanded(false);
     setIsRevisionHistoryExpanded(false);
     setFeedback("");
+    setSession(null);
     setExcludedEvidenceKeys(new Set<string>());
     setReviewedEvidenceGaps(false);
 
     const threadId = crypto.randomUUID();
-    let pollActive = true;
-
-    const pollProgress = async () => {
-      try {
-        const liveSession = await fetchSessionByThreadId(threadId);
-        if (!pollActive || !liveSession) return;
-        setSession(liveSession);
-        setGenerationProgress(nodeProgressLabel(liveSession));
-      } catch {
-        // Best-effort polling while ask request is still in flight.
-      }
-    };
-
-    await pollProgress();
-    const pollTimer = window.setInterval(() => {
-      void pollProgress();
-    }, 900);
+    openWorkflowStream({ threadId });
 
     try {
       const next = await askQuestion(question.trim(), tone, threadId);
       setSession(next);
       setGenerationProgress(nodeProgressLabel(next));
+      openWorkflowStream({ sessionId: next.id });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit question.");
       setGenerationProgress(null);
+      closeWorkflowStream();
     } finally {
-      pollActive = false;
-      window.clearInterval(pollTimer);
       setIsGeneratingDraft(false);
       setLoading(false);
     }
@@ -203,6 +281,7 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
 
     setLoading(true);
     setError(null);
+    openWorkflowStream({ sessionId: session.id });
 
     try {
       const next = await reviewSession(session.id, "approve", {
@@ -259,23 +338,7 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
     setIsSubmittingRevision(true);
     setRevisionProgress("Initializing workflow...");
     setError(null);
-
-    let pollActive = true;
-    const pollProgress = async () => {
-      try {
-        const liveSession = await fetchSession(activeSessionId);
-        if (!pollActive || !liveSession) return;
-        setSession(liveSession);
-        setRevisionProgress(nodeProgressLabel(liveSession));
-      } catch {
-        // Best-effort polling while revision request is in flight.
-      }
-    };
-
-    await pollProgress();
-    const pollTimer = window.setInterval(() => {
-      void pollProgress();
-    }, 900);
+    openWorkflowStream({ sessionId: activeSessionId });
 
     try {
       const next = await reviewSession(activeSessionId, "revise", {
@@ -293,8 +356,6 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
       setError(err instanceof Error ? err.message : "Failed to request revision.");
       setRevisionProgress(null);
     } finally {
-      pollActive = false;
-      window.clearInterval(pollTimer);
       setIsSubmittingRevision(false);
       setLoading(false);
     }

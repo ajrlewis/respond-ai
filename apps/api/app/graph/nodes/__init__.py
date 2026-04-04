@@ -41,6 +41,7 @@ from app.services.confidence import (
     build_structured_confidence_payload,
     render_confidence_notes,
 )
+from app.services.workflow_events import workflow_event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +103,7 @@ class WorkflowNodes:
             yield db
 
     async def _set_current_node(self, session_id: str | None, node_name: str) -> None:
-        """Persist node-level progress for UI polling."""
+        """Persist node-level progress and broadcast SSE updates."""
 
         if not session_id:
             return
@@ -114,6 +115,32 @@ class WorkflowNodes:
                 return
             session.current_node = node_name
             await db.commit()
+        await self._publish_session_update(
+            session_id,
+            reason="node_started",
+            node_name=node_name,
+        )
+
+    async def _publish_session_update(
+        self,
+        session_id: str | None,
+        *,
+        reason: str,
+        node_name: str | None = None,
+        status: str | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Publish a workflow update signal for SSE subscribers."""
+
+        if not session_id:
+            return
+        await workflow_event_bus.publish_session(
+            session_id=session_id,
+            reason=reason,
+            node_name=node_name,
+            status=status,
+            error=error,
+        )
 
     @staticmethod
     def _build_retrieval_config(*, plan, retry_count: int) -> dict[str, int | str | bool]:

@@ -93,6 +93,16 @@ export type Session = {
   updated_at: string;
 };
 
+export type WorkflowStateEvent = {
+  reason: string;
+  timestamp?: string;
+  node?: string;
+  status?: string;
+  error?: string;
+  session?: Session;
+  stream_ref?: string;
+};
+
 export type AuthUser = {
   username: string;
 };
@@ -197,6 +207,18 @@ export async function fetchSessionByThreadId(threadId: string): Promise<Session 
   }
 
   return (await response.json()) as Session;
+}
+
+export function openSessionEventsStream(sessionId: string): EventSource {
+  return new EventSource(`${API_BASE_URL}/api/questions/${encodeURIComponent(sessionId)}/events`, {
+    withCredentials: true,
+  });
+}
+
+export function openThreadEventsStream(threadId: string): EventSource {
+  return new EventSource(`${API_BASE_URL}/api/questions/thread/${encodeURIComponent(threadId)}/events`, {
+    withCredentials: true,
+  });
 }
 
 export async function fetchDrafts(sessionId: string): Promise<AnswerVersion[]> {

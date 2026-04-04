@@ -12,6 +12,8 @@ def test_main_app_imports_and_registers_core_routes() -> None:
     assert "/auth/me" in route_paths
     assert "/api/questions/ask" in route_paths
     assert "/api/questions/{session_id}/review" in route_paths
+    assert "/api/questions/{session_id}/events" in route_paths
+    assert "/api/questions/thread/{thread_id}/events" in route_paths
     assert "/api/questions/{session_id}/drafts" in route_paths
     assert "/api/questions/{session_id}/drafts/{draft_id}" in route_paths
     assert "/api/questions/{session_id}/drafts/compare" in route_paths

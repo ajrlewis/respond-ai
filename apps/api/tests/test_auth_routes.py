@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from uuid import uuid4
 
 from app.core.config import settings
 from app.main import create_app
@@ -59,9 +60,12 @@ def test_auth_me_returns_401_when_unauthenticated() -> None:
 def test_protected_route_rejects_unauthenticated_request() -> None:
     with _client() as client:
         response = client.get("/api/documents")
+        stream_response = client.get(f"/api/questions/{uuid4()}/events")
 
     assert response.status_code == 401
     assert response.json()["detail"] == "Authentication required."
+    assert stream_response.status_code == 401
+    assert stream_response.json()["detail"] == "Authentication required."
 
 
 def test_logout_invalidates_session() -> None:

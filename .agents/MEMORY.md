@@ -63,7 +63,7 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - API logging level is configured via `LOGGING_LEVEL` (default `INFO`) in `apps/api/app/core/config.py` and applied by `app/core/logging.py`.
 - API emits lifecycle/debug logs across routes, graph runtime/nodes, and service/database layers using module loggers (`logging.getLogger(__name__)`).
 - API startup import smoke coverage lives in `apps/api/tests/test_app_startup.py` to catch startup-time import/runtime wiring regressions.
-- Session payloads now include `current_node`, and `GET /api/questions/thread/{thread_id}` supports thread-based progress polling while `POST /api/questions/ask` is running.
+- Session payloads include `current_node`, and workflow progress now streams over SSE via `GET /api/questions/{session_id}/events` (plus bootstrap `GET /api/questions/thread/{thread_id}/events` during initial ask execution).
 - Session API payload includes structured `confidence` metadata and `answer_versions` snapshots for revision history/diff UX.
 - `POST /api/questions/{session_id}/review` accepts `excluded_evidence_keys` and `reviewed_evidence_gaps`; approve is rejected when evidence gaps exist and are not acknowledged.
 - Session payload now includes `evidence_gap_count`, `requires_gap_acknowledgement`, `evidence_gaps_acknowledged`, and `evidence_gaps_acknowledged_at` to support approval gating in review UI.

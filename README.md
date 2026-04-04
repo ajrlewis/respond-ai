@@ -70,9 +70,17 @@ respondai/
 - Next.js App Router + TypeScript
 - three-panel workflow UI (question intake, draft/review, evidence)
 - typed API client and explicit workflow actions (approve/revise)
+- Server-Sent Events (SSE) subscription for live workflow progress/state updates
 - citation click-to-focus linking between answer body and evidence cards
 - revision history snapshots with inline diffing between draft versions
 - reviewer source exclusion controls for revision re-drafts
+
+### Realtime Model (MVP)
+
+- user mutations (`ask`, `approve`, `revise`) stay as normal HTTP endpoints
+- server-push progress/status uses SSE (`text/event-stream`)
+- backend uses an in-memory per-session broadcaster (no Redis/WebSocket infra)
+- chosen for one-way workflow updates and interview-friendly simplicity
 
 ### Database Layout
 
@@ -166,6 +174,7 @@ EVAL_LLM_MODEL=
 ```
 
 Mixed-provider deployments are supported. Example:
+
 - `LARGE_LLM_PROVIDER=anthropic`
 - `SMALL_LLM_PROVIDER=openai`
 - `EMBEDDING_PROVIDER=openai`
@@ -198,6 +207,8 @@ APP_WEB_ORIGIN=http://localhost:3000
 - `POST /api/questions/ask`
 - `POST /api/questions/{session_id}/review`
 - `GET /api/questions/{session_id}`
+- `GET /api/questions/{session_id}/events` (SSE)
+- `GET /api/questions/thread/{thread_id}/events` (SSE bootstrap during initial ask run)
 - `GET /api/questions/{session_id}/drafts`
 - `GET /api/questions/{session_id}/drafts/{draft_id}`
 - `GET /api/questions/{session_id}/drafts/compare?left=<id>&right=<id>`
@@ -283,6 +294,9 @@ bun run dev
 ```bash
 # Build and start everything
 docker compose up -d --build --remove-orphans
+
+# Remove dangling images
+docker
 
 # Seed the database
 docker compose exec -T api uv run python scripts/seed_data.py

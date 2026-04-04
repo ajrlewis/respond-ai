@@ -15,6 +15,7 @@ from app.routes.utils import session_to_schema
 from app.schemas.reviews import ReviewOut, ReviewRequest, ReviewResponse
 from app.services.review_service import ReviewService
 from app.services.session_service import SessionService
+from app.services.workflow_events import workflow_event_bus
 
 router = APIRouter(prefix="/api/questions", tags=["reviews"], dependencies=[Depends(require_current_user)])
 logger = logging.getLogger(__name__)
@@ -97,21 +98,35 @@ async def review_session(
         has_evidence_gaps=has_evidence_gaps,
     )
     logger.debug("Review persisted session_id=%s action=%s", session_id, payload.reviewer_action)
+    await workflow_event_bus.publish_session(
+        session_id=str(session_id),
+        reason="review_submitted",
+        status=payload.reviewer_action,
+    )
 
     logger.info("Resuming workflow from review thread_id=%s", thread_id)
-    await resume_from_review(
-        thread_id=thread_id,
-        review_payload={
-            "session_id": str(session_id),
-            "reviewer_action": payload.reviewer_action,
-            "review_comments": payload.review_comments or "",
-            "edited_answer": payload.edited_answer or "",
-            "reviewer_id": payload.reviewer_id or "",
-            "excluded_evidence_keys": payload.excluded_evidence_keys,
-            "reviewed_evidence_gaps": effective_gap_acknowledgement,
-            "evidence_gaps_acknowledged": effective_gap_acknowledgement,
-        },
-    )
+    try:
+        await resume_from_review(
+            thread_id=thread_id,
+            review_payload={
+                "session_id": str(session_id),
+                "reviewer_action": payload.reviewer_action,
+                "review_comments": payload.review_comments or "",
+                "edited_answer": payload.edited_answer or "",
+                "reviewer_id": payload.reviewer_id or "",
+                "excluded_evidence_keys": payload.excluded_evidence_keys,
+                "reviewed_evidence_gaps": effective_gap_acknowledgement,
+                "evidence_gaps_acknowledged": effective_gap_acknowledgement,
+            },
+        )
+    except Exception as exc:
+        await workflow_event_bus.publish_session(
+            session_id=str(session_id),
+            reason="workflow_error",
+            status="error",
+            error=str(exc),
+        )
+        raise
 
     refreshed = await session_service.get_session(session_id)
     if not refreshed:
