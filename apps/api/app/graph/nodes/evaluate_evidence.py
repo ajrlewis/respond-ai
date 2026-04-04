@@ -21,7 +21,6 @@ from app.services.evidence_analysis import (
     normalize_evaluation_result,
     partition_evidence,
 )
-from app.services.planning import retrieval_plan_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,10 @@ async def evaluate_evidence_node(nodes, state: WorkflowState) -> WorkflowState:
     async def _operation() -> WorkflowState:
         question = state.get("question_text", "")
         retry_count = int(state.get("retry_count", 0) or 0)
-        plan = RetrievalPlanResult.model_validate(state.get("retrieval_plan") or retrieval_plan_fallback(question).model_dump())
+        raw_plan = state.get("retrieval_plan")
+        if raw_plan is None:
+            raise RuntimeError("Missing retrieval_plan in workflow state before evaluate_evidence.")
+        plan = RetrievalPlanResult.model_validate(raw_plan)
         candidates = list(state.get("retrieved_evidence", []) or state.get("retrieved_chunks", []) or [])
         logger.debug(
             "Node evaluate_evidence started session_id=%s candidate_count=%d retry=%d",

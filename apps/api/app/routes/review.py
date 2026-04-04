@@ -8,6 +8,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import require_current_user
 from app.core.database import get_db
 from app.graph.runtime import resume_from_review
 from app.routes.utils import session_to_schema
@@ -15,7 +16,7 @@ from app.schemas.reviews import ReviewOut, ReviewRequest, ReviewResponse
 from app.services.review_service import ReviewService
 from app.services.session_service import SessionService
 
-router = APIRouter(prefix="/api/questions", tags=["reviews"])
+router = APIRouter(prefix="/api/questions", tags=["reviews"], dependencies=[Depends(require_current_user)])
 logger = logging.getLogger(__name__)
 
 

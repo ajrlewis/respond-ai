@@ -38,7 +38,7 @@ async def revise_response_node(nodes, state: WorkflowState) -> WorkflowState:
                 f"{retrieval_notes} Reviewer excluded {len(requested_exclusions)} chunk(s) for this revision."
             ).strip()
 
-        revised_text, confidence_notes, confidence_payload, revision_intent, draft_metadata = await revise_answer(
+        revised_text, revised_confidence_notes, revised_confidence_payload, revision_intent, draft_metadata = await revise_answer(
             question=state["question_text"],
             question_type=state.get("question_type", "other"),
             prior_draft=state.get("draft_answer", ""),
@@ -47,6 +47,21 @@ async def revise_response_node(nodes, state: WorkflowState) -> WorkflowState:
             tone=state.get("tone", "formal"),
             retrieval_notes=retrieval_notes,
         )
+        base_confidence_payload = dict(state.get("confidence_payload", {}) or {})
+        if filtered_evidence and base_confidence_payload:
+            confidence_payload = {
+                **base_confidence_payload,
+                "revision_intent": revision_intent,
+                "draft_metadata": draft_metadata,
+            }
+            confidence_notes = str(state.get("confidence_notes", "")).strip() or revised_confidence_notes
+        else:
+            confidence_payload = {
+                **revised_confidence_payload,
+                "revision_intent": revision_intent,
+                "draft_metadata": draft_metadata,
+            }
+            confidence_notes = revised_confidence_notes
         logger.info(
             "Node revise_response completed session_id=%s answer_chars=%d evidence_used=%d evidence_excluded=%d",
             state.get("session_id"),
@@ -60,11 +75,7 @@ async def revise_response_node(nodes, state: WorkflowState) -> WorkflowState:
             if session:
                 session.draft_answer = revised_text
                 session.confidence_notes = confidence_notes
-                session.confidence_payload = {
-                    **confidence_payload,
-                    "revision_intent": revision_intent,
-                    "draft_metadata": draft_metadata,
-                }
+                session.confidence_payload = confidence_payload
                 session.evidence_payload = marked_evidence
                 session.evidence_gaps_acknowledged = False
                 session.evidence_gaps_acknowledged_at = None
@@ -78,11 +89,7 @@ async def revise_response_node(nodes, state: WorkflowState) -> WorkflowState:
             "revision_intent": revision_intent,
             "draft_metadata": draft_metadata,
             "confidence_notes": confidence_notes,
-            "confidence_payload": {
-                **confidence_payload,
-                "revision_intent": revision_intent,
-                "draft_metadata": draft_metadata,
-            },
+            "confidence_payload": confidence_payload,
             "status": "awaiting_review",
             "excluded_evidence_keys": merged_exclusions,
             "review_action": "",

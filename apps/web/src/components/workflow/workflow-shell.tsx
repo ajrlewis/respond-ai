@@ -11,8 +11,14 @@ import { useWorkflow } from "@/hooks/use-workflow";
 import { formatComplianceStatus, formatDraftState, formatDraftTimestamp } from "@/lib/format";
 import { SAMPLE_QUESTIONS, buildCitationView, statusLabel, workflowSummary } from "@/lib/workflow";
 
-export function WorkflowShell() {
-  const workflow = useWorkflow();
+type WorkflowShellProps = {
+  currentUsername?: string;
+  isLoggingOut?: boolean;
+  onLogout?: () => void;
+};
+
+export function WorkflowShell({ currentUsername, isLoggingOut = false, onLogout }: WorkflowShellProps) {
+  const workflow = useWorkflow(currentUsername);
   const draftHistory = useDraftHistory({ session: workflow.session });
   const [activeEvidenceKey, setActiveEvidenceKey] = useState<string | null>(null);
 
@@ -78,7 +84,7 @@ export function WorkflowShell() {
   return (
     <main className="page-shell">
       <div className="backdrop-grid" />
-      <WorkflowHeader />
+      <WorkflowHeader currentUsername={currentUsername} isLoggingOut={isLoggingOut} onLogout={onLogout} />
 
       <section className="workflow-grid">
         <QuestionPanel

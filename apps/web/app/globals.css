@@ -67,10 +67,33 @@ p {
   gap: 6px;
 }
 
+.header-top-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
 .brand-row {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-chip {
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  font-size: 0.84rem;
+  color: var(--text-main);
 }
 
 .brand-mark {
@@ -149,12 +172,14 @@ p {
 }
 
 textarea,
+input,
 select,
 button {
   font: inherit;
 }
 
 textarea,
+input,
 select {
   width: 100%;
   border-radius: 12px;
@@ -165,6 +190,10 @@ select {
 }
 
 textarea::placeholder {
+  color: rgba(231, 245, 255, 0.55);
+}
+
+input::placeholder {
   color: rgba(231, 245, 255, 0.55);
 }
 
@@ -210,6 +239,40 @@ button.secondary {
 button.warning {
   background: linear-gradient(135deg, #f6bf7a, #db9448);
   color: #2c1400;
+}
+
+.auth-shell {
+  position: relative;
+  z-index: 1;
+  min-height: calc(100vh - 48px);
+  display: grid;
+  place-items: center;
+}
+
+.auth-panel {
+  width: min(460px, 92vw);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  padding: 24px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 12px 36px rgba(8, 26, 38, 0.32);
+}
+
+.auth-subtitle {
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+.auth-panel button[type="submit"] {
+  margin-top: 16px;
+  width: 100%;
+}
+
+.form-error {
+  margin-top: 10px;
+  color: var(--danger);
+  font-size: 0.92rem;
 }
 
 .sample-prompts {
@@ -676,6 +739,16 @@ button.warning {
 @media (max-width: 720px) {
   .page-shell {
     padding: 16px;
+  }
+
+  .header-top-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .brand-row {

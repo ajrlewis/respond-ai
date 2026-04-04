@@ -64,7 +64,7 @@ class RetrievalService:
                 distance.label("distance"),
             )
             .join(Document, Document.id == DocumentChunk.document_id)
-            .order_by(distance)
+            .order_by(distance, DocumentChunk.id.asc())
             .limit(top_k)
         )
 
@@ -104,7 +104,7 @@ class RetrievalService:
             FROM document_chunks c
             JOIN documents d ON d.id = c.document_id
             WHERE to_tsvector('english', c.chunk_text) @@ plainto_tsquery('english', :query)
-            ORDER BY rank DESC
+            ORDER BY rank DESC, c.id ASC
             LIMIT :top_k
             """
         )
@@ -126,7 +126,7 @@ class RetrievalService:
                 FROM document_chunks c
                 JOIN documents d ON d.id = c.document_id
                 WHERE c.chunk_text ILIKE '%' || :query || '%'
-                ORDER BY rank DESC
+                ORDER BY rank DESC, c.id ASC
                 LIMIT :top_k
                 """
             )
@@ -197,7 +197,10 @@ class RetrievalService:
             if current is None or item.score > current.score:
                 merged[item.chunk_id] = item
 
-        ranked = sorted(merged.values(), key=lambda chunk: chunk.score, reverse=True)
+        ranked = sorted(
+            merged.values(),
+            key=lambda chunk: (-float(chunk.score), str(chunk.chunk_id)),
+        )
         results = ranked[:top_k]
         logger.debug(
             "Hybrid search merged semantic=%d keyword=%d unique=%d returned=%d",

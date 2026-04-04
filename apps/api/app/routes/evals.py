@@ -9,13 +9,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import require_current_user
 from app.core.database import get_db
 from app.db.models import EvalRun
 from app.evals.report import summarize_eval_run
 from app.evals.runner import EvalRunner
 from app.schemas.evals import EvalRunListItemOut, EvalRunSummaryOut, EvalRunTriggerRequest
 
-router = APIRouter(prefix="/api/evals", tags=["evals"])
+router = APIRouter(prefix="/api/evals", tags=["evals"], dependencies=[Depends(require_current_user)])
 logger = logging.getLogger(__name__)
 
 

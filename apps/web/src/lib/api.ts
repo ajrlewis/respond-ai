@@ -93,21 +93,50 @@ export type Session = {
   updated_at: string;
 };
 
+export type AuthUser = {
+  username: string;
+};
+
+type AuthResponse = {
+  authenticated: boolean;
+  user: AuthUser;
+};
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
+async function parseErrorMessage(response: Response): Promise<string> {
+  const fallback = `Request failed with status ${response.status}`;
+
+  try {
+    const body = (await response.json()) as unknown;
+    if (body && typeof body === "object" && "detail" in body) {
+      const detail = (body as { detail?: unknown }).detail;
+      if (typeof detail === "string" && detail.trim()) {
+        return detail;
+      }
+    }
+    return fallback;
+  } catch {
+    const text = await response.text();
+    return text || fallback;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (init?.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
+    headers,
+    credentials: "include",
     cache: "no-store",
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Request failed with status ${response.status}`);
+    throw new Error(await parseErrorMessage(response));
   }
 
   return (await response.json()) as T;
@@ -155,9 +184,7 @@ export async function fetchSession(sessionId: string): Promise<Session> {
 
 export async function fetchSessionByThreadId(threadId: string): Promise<Session | null> {
   const response = await fetch(`${API_BASE_URL}/api/questions/thread/${encodeURIComponent(threadId)}`, {
-    headers: {
-      "Content-Type": "application/json",
-    },
+    credentials: "include",
     cache: "no-store",
   });
 
@@ -166,8 +193,7 @@ export async function fetchSessionByThreadId(threadId: string): Promise<Session 
   }
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Request failed with status ${response.status}`);
+    throw new Error(await parseErrorMessage(response));
   }
 
   return (await response.json()) as Session;
@@ -184,4 +210,36 @@ export async function fetchDraft(sessionId: string, draftId: string): Promise<An
 export async function compareDrafts(sessionId: string, leftId: string, rightId: string): Promise<DraftComparison> {
   const query = new URLSearchParams({ left: leftId, right: rightId });
   return request<DraftComparison>(`/api/questions/${sessionId}/drafts/compare?${query.toString()}`);
+}
+
+export async function login(username: string, password: string): Promise<AuthUser> {
+  const payload = await request<AuthResponse>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+  return payload.user;
+}
+
+export async function logout(): Promise<void> {
+  await request<{ authenticated: boolean }>("/auth/logout", {
+    method: "POST",
+  });
+}
+
+export async function fetchCurrentUser(): Promise<AuthUser | null> {
+  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  if (response.status === 401) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  const payload = (await response.json()) as AuthResponse;
+  return payload.user;
 }

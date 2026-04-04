@@ -16,7 +16,7 @@ from app.graph.nodes.draft_response import draft_response_node, polish_response_
 from app.graph.nodes.evaluate_evidence import cross_reference_evidence_node, evaluate_evidence_node
 from app.graph.nodes.finalize_response import finalize_response_node
 from app.graph.nodes.human_review import human_review_node
-from app.graph.nodes.retrieve_evidence import adaptive_retrieve_node, retrieve_evidence_node
+from app.graph.nodes.retrieve_evidence import adaptive_retrieve_node
 from app.graph.nodes.revise_response import revise_response_node
 from app.graph.state import WorkflowState
 from app.prompts import render_prompt_template as render_central_prompt_template
@@ -37,7 +37,6 @@ from app.services.observability import (
     reset_observability_context,
     summarize_workflow_state,
 )
-from app.services.planning import retrieval_plan_fallback
 from app.services.confidence import (
     build_structured_confidence_payload,
     render_confidence_notes,
@@ -134,11 +133,6 @@ class WorkflowNodes:
     async def adaptive_retrieve(self, state: WorkflowState) -> WorkflowState:
         return await adaptive_retrieve_node(self, state)
 
-    async def retrieve_evidence(self, state: WorkflowState) -> WorkflowState:
-        """Backward-compatible wrapper for legacy node name."""
-
-        return await retrieve_evidence_node(self, state)
-
     async def evaluate_evidence(self, state: WorkflowState) -> WorkflowState:
         return await evaluate_evidence_node(self, state)
 
@@ -174,5 +168,4 @@ __all__ = [
     "mark_excluded_evidence",
     "render_confidence_notes",
     "render_prompt_template",
-    "retrieval_plan_fallback",
 ]

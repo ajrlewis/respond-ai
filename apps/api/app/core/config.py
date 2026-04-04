@@ -47,11 +47,11 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     google_api_key: str = ""
 
-    large_llm_provider: str = ""
+    large_llm_provider: str = "openai"
     large_llm_model: str = "gpt-4o"
-    small_llm_provider: str = ""
+    small_llm_provider: str = "openai"
     small_llm_model: str = "gpt-4o-mini"
-    embedding_provider: str = ""
+    embedding_provider: str = "openai"
     embedding_model: str = "text-embedding-3-small"
     embedding_dimension: int = 1536
     eval_llm_provider: str = ""
@@ -72,6 +72,11 @@ class Settings(BaseSettings):
 
     retrieval_top_k: int = 10
     final_evidence_k: int = 6
+
+    app_demo_username: str = "admin"
+    app_demo_password: str = "admin1234"
+    app_session_secret: str = "respondai-demo-session-secret"
+    app_web_origin: str = "http://localhost:3000"
 
 
 @lru_cache(maxsize=1)

@@ -1,10 +1,9 @@
-from app.ai.schemas import DraftMetadataResult, EvidenceEvaluationResult, EvidenceSynthesisResult, RetrievalPlanResult
+from app.ai.schemas import DraftMetadataResult, EvidenceEvaluationResult, EvidenceSynthesisResult
 from app.graph.nodes import (
     active_evidence,
     append_answer_version,
     build_confidence_notes,
     build_structured_confidence_payload,
-    retrieval_plan_fallback,
     render_confidence_notes,
     curate_evidence,
     mark_excluded_evidence,
@@ -40,6 +39,29 @@ def test_curate_evidence_dedupes_and_boosts_multi_method() -> None:
     assert curated[0]["chunk_id"] == "1"
     assert "keyword" in curated[0]["retrieval_method"]
     assert "semantic" in curated[0]["retrieval_method"]
+
+
+def test_curate_evidence_uses_deterministic_tie_breaker() -> None:
+    candidates = [
+        {
+            "chunk_id": "b",
+            "document_filename": "b.md",
+            "chunk_index": 2,
+            "score": 0.4,
+            "retrieval_method": "keyword",
+        },
+        {
+            "chunk_id": "a",
+            "document_filename": "a.md",
+            "chunk_index": 1,
+            "score": 0.4,
+            "retrieval_method": "keyword",
+        },
+    ]
+
+    curated = curate_evidence(candidates, final_k=5)
+
+    assert [item["chunk_id"] for item in curated] == ["a", "b"]
 
 
 def test_build_confidence_notes_mentions_counts() -> None:
@@ -133,15 +155,3 @@ def test_append_answer_version_skips_adjacent_duplicates() -> None:
     assert len(versions) == 2
     assert versions[0]["label"] == "Draft 1"
     assert versions[1]["label"] == "Draft 2"
-
-
-def test_retrieval_plan_fallback_infers_strategy_requirements() -> None:
-    plan = retrieval_plan_fallback(
-        "Describe your renewable strategy with portfolio examples and performance KPIs.",
-    )
-
-    assert isinstance(plan, RetrievalPlanResult)
-    assert plan.question_type in {"strategy", "track_record"}
-    assert plan.retrieval_strategy == "hybrid"
-    assert plan.needs_examples is True
-    assert plan.needs_quantitative_support is True

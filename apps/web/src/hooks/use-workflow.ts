@@ -74,7 +74,7 @@ type UseWorkflowResult = {
   toggleEvidenceExclusion: (key: string) => void;
 };
 
-export function useWorkflow(): UseWorkflowResult {
+export function useWorkflow(reviewerId?: string): UseWorkflowResult {
   const [question, setQuestion] = useState("");
   const [tone, setTone] = useState<Tone>("formal");
   const [feedback, setFeedback] = useState("");
@@ -206,6 +206,7 @@ export function useWorkflow(): UseWorkflowResult {
 
     try {
       const next = await reviewSession(session.id, "approve", {
+        reviewerId: reviewerId?.trim() || undefined,
         evidenceGapsAcknowledged: isGapAcknowledged,
       });
       setSession(next);
@@ -278,6 +279,7 @@ export function useWorkflow(): UseWorkflowResult {
 
     try {
       const next = await reviewSession(activeSessionId, "revise", {
+        reviewerId: reviewerId?.trim() || undefined,
         reviewComments: feedback.trim() || undefined,
         excludedEvidenceKeys: Array.from(excludedEvidenceKeys),
         evidenceGapsAcknowledged: isGapAcknowledged,

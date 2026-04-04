@@ -6,11 +6,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import require_current_user
 from app.core.database import get_db
 from app.db.models import Document
 from app.schemas.documents import DocumentOut
 
-router = APIRouter(prefix="/api/documents", tags=["documents"])
+router = APIRouter(prefix="/api/documents", tags=["documents"], dependencies=[Depends(require_current_user)])
 logger = logging.getLogger(__name__)
 
 

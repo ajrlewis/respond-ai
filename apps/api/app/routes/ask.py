@@ -8,6 +8,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import require_current_user
 from app.core.database import get_db
 from app.graph.runtime import run_until_human_review
 from app.routes.utils import session_to_schema
@@ -18,7 +19,7 @@ from app.schemas.sessions import AskRequest, AskResponse, SessionOut
 from app.services.draft_history import compare_session_drafts, get_session_draft, list_session_drafts
 from app.services.session_service import SessionService
 
-router = APIRouter(prefix="/api/questions", tags=["questions"])
+router = APIRouter(prefix="/api/questions", tags=["questions"], dependencies=[Depends(require_current_user)])
 logger = logging.getLogger(__name__)
 
 

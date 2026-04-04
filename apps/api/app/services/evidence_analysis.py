@@ -168,8 +168,10 @@ def apply_plan_scoring(
 
     ranked = sorted(
         deduped.values(),
-        key=lambda item: float(item.get("score", 0.0)),
-        reverse=True,
+        key=lambda item: (
+            -float(item.get("score", 0.0)),
+            evidence_item_key(item),
+        ),
     )
     return ranked
 
@@ -560,7 +562,12 @@ def curate_evidence(candidates: list[dict], final_k: int) -> list[dict]:
         item.pop("methods", None)
         reranked.append(item)
 
-    reranked.sort(key=lambda evidence: evidence.get("score", 0.0), reverse=True)
+    reranked.sort(
+        key=lambda evidence: (
+            -float(evidence.get("score", 0.0)),
+            evidence_item_key(evidence),
+        )
+    )
     results = reranked[:final_k]
     logger.debug("Evidence curation completed deduped=%d selected=%d", len(deduped), len(results))
     return results

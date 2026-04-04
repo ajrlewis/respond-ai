@@ -10,7 +10,6 @@ from app.db.models import RFPSession
 from app.graph.nodes._execution import execute_node
 from app.graph.state import WorkflowState
 from app.services.evidence_analysis import adaptive_retrieve, optional_embedding_service
-from app.services.planning import retrieval_plan_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,10 @@ async def adaptive_retrieve_node(nodes, state: WorkflowState) -> WorkflowState:
     async def _operation() -> WorkflowState:
         query = state["question_text"]
         retry_count = int(state.get("retry_count", 0) or 0)
-        plan = RetrievalPlanResult.model_validate(state.get("retrieval_plan") or retrieval_plan_fallback(query).model_dump())
+        raw_plan = state.get("retrieval_plan")
+        if raw_plan is None:
+            raise RuntimeError("Missing retrieval_plan in workflow state before adaptive_retrieve.")
+        plan = RetrievalPlanResult.model_validate(raw_plan)
         config = nodes._build_retrieval_config(plan=plan, retry_count=retry_count)
         logger.debug(
             "Node adaptive_retrieve started session_id=%s strategy=%s retry=%d",
@@ -68,9 +70,3 @@ async def adaptive_retrieve_node(nodes, state: WorkflowState) -> WorkflowState:
         state=state,
         operation=_operation,
     )
-
-
-async def retrieve_evidence_node(nodes, state: WorkflowState) -> WorkflowState:
-    """Backward-compatible wrapper for legacy node name."""
-
-    return await adaptive_retrieve_node(nodes, state)

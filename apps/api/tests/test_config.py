@@ -29,3 +29,12 @@ def test_default_ai_provider_settings() -> None:
     assert settings.large_llm_model == "gpt-4o"
     assert settings.small_llm_model == "gpt-4o-mini"
     assert settings.embedding_model == "text-embedding-3-small"
+
+
+def test_demo_auth_defaults() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.app_demo_username == "admin"
+    assert settings.app_demo_password == "admin1234"
+    assert settings.app_session_secret == "respondai-demo-session-secret"
+    assert settings.app_web_origin == "http://localhost:3000"

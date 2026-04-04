@@ -69,6 +69,7 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - Session payload now includes `evidence_gap_count`, `requires_gap_acknowledgement`, `evidence_gaps_acknowledged`, and `evidence_gaps_acknowledged_at` to support approval gating in review UI.
 - Session-level evidence-gap acknowledgement is reset when a new draft/revision is generated, and approval is server-enforced unless evidence gaps are acknowledged.
 - LangGraph main flow now runs `ask -> classify_and_plan -> adaptive_retrieve -> evaluate_evidence -> draft_response -> polish_response -> human_review`, with bounded one-time retry routing from `evaluate_evidence` back to `adaptive_retrieve` when evidence is insufficient.
+- Retrieval planning is fail-fast: `plan_retrieval` no longer applies a heuristic fallback when LLM planning is unavailable, and downstream nodes require `retrieval_plan` to be present in workflow state.
 - `rfp_sessions` persists structured planning/evaluation artifacts in `retrieval_plan_payload`, `retrieval_strategy_used`, `retrieval_metadata_payload`, `evidence_evaluation_payload`, `selected_evidence_payload`, `rejected_evidence_payload`, and `retry_count`.
 - Drafting now consumes planner + evidence-evaluation context and selected evidence, while confidence payloads include retrieval strategy, evaluator coverage, recommended action, and selected/rejected chunk ids.
 - Draft history APIs are available at `GET /api/questions/{session_id}/drafts`, `GET /api/questions/{session_id}/drafts/{draft_id}`, and `GET /api/questions/{session_id}/drafts/compare?left=<id>&right=<id>`.
@@ -79,3 +80,7 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - Eval API endpoints are `POST /api/evals/run`, `GET /api/evals/runs`, and `GET /api/evals/runs/{run_id}`.
 - Graph node implementations are split under `apps/api/app/graph/nodes/` as thin orchestration adapters; planning, evidence analysis, drafting/revision/polish, and finalization business logic live in `apps/api/app/services/{planning,evidence_analysis,drafting,finalization}.py`.
 - Web workflow UI is organized under `apps/web/src/components/workflow/` with orchestration hooks in `apps/web/src/hooks/use-workflow.ts` and `apps/web/src/hooks/use-draft-history.ts`; `apps/web/src/components/workflow-shell.tsx` is a thin re-export to the workflow container.
+- Demo authentication endpoints are `POST /auth/login`, `POST /auth/logout`, and `GET /auth/me`, backed by FastAPI signed cookie sessions (`SessionMiddleware`).
+- Workflow/business API routers (`/api/questions`, `/api/documents`, `/api/evals`) require authenticated sessions via `app.core.auth.require_current_user`, while `/health` and `/auth/*` are public.
+- API CORS is restricted to `APP_WEB_ORIGIN` (allowlist, credentials enabled) instead of wildcard origins.
+- Review-summary confidence now stays anchored to `evaluate_evidence` output; drafting/revision stages attach metadata (`draft_metadata`, `revision_intent`) without re-scoring confidence fields.

@@ -26,7 +26,7 @@ async def draft_response_node(nodes, state: WorkflowState) -> WorkflowState:
             state.get("session_id"),
             len(selected_evidence),
         )
-        answer, confidence_notes, confidence_payload, draft_metadata = await draft_answer(
+        answer, draft_confidence_notes, draft_confidence_payload, draft_metadata = await draft_answer(
             question=state["question_text"],
             question_type=state.get("question_type", "other"),
             tone=state.get("tone", "formal"),
@@ -37,6 +37,13 @@ async def draft_response_node(nodes, state: WorkflowState) -> WorkflowState:
             evidence_evaluation=state.get("evidence_evaluation", {}),
             retrieval_strategy_used=state.get("retrieval_strategy_used"),
         )
+        base_confidence_payload = dict(state.get("confidence_payload", {}) or {})
+        confidence_payload = base_confidence_payload or draft_confidence_payload
+        confidence_payload = {
+            **confidence_payload,
+            "draft_metadata": draft_metadata,
+        }
+        confidence_notes = str(state.get("confidence_notes", "")).strip() or draft_confidence_notes
         logger.info(
             "Node draft_response completed session_id=%s answer_chars=%d",
             state.get("session_id"),
@@ -48,7 +55,7 @@ async def draft_response_node(nodes, state: WorkflowState) -> WorkflowState:
             if session:
                 session.draft_answer = answer
                 session.confidence_notes = confidence_notes
-                session.confidence_payload = {**confidence_payload, "draft_metadata": draft_metadata}
+                session.confidence_payload = confidence_payload
                 session.selected_evidence_payload = selected_evidence
                 session.evidence_gaps_acknowledged = False
                 session.evidence_gaps_acknowledged_at = None
@@ -60,7 +67,7 @@ async def draft_response_node(nodes, state: WorkflowState) -> WorkflowState:
             "draft_origin": "initial",
             "draft_metadata": draft_metadata,
             "confidence_notes": confidence_notes,
-            "confidence_payload": {**confidence_payload, "draft_metadata": draft_metadata},
+            "confidence_payload": confidence_payload,
             "status": "awaiting_review",
             "current_node": "draft_response",
             "session_id": state.get("session_id"),

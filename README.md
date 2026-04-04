@@ -172,9 +172,29 @@ Mixed-provider deployments are supported. Example:
 
 Note: `EMBEDDING_PROVIDER=anthropic` is not supported in this stack; use `openai` or `google`.
 
+## Demo Auth + CORS
+
+This MVP uses a lightweight cookie-based demo session auth layer:
+
+```env
+APP_DEMO_USERNAME=admin
+APP_DEMO_PASSWORD=admin1234
+APP_SESSION_SECRET=respondai-demo-session-secret
+APP_WEB_ORIGIN=http://localhost:3000
+```
+
+- Login endpoint: `POST /auth/login`
+- Logout endpoint: `POST /auth/logout`
+- Session check endpoint: `GET /auth/me`
+- Workflow/API routes under `/api/*` require authentication and return `401` when logged out.
+- CORS is restricted to `APP_WEB_ORIGIN` and credentials are enabled for cookie auth.
+
 ## API Endpoints
 
 - `GET /health`
+- `POST /auth/login`
+- `POST /auth/logout`
+- `GET /auth/me`
 - `POST /api/questions/ask`
 - `POST /api/questions/{session_id}/review`
 - `GET /api/questions/{session_id}`
@@ -212,6 +232,7 @@ cp .env.example .env
    Default config requires `OPENAI_API_KEY`.
    The app uses a single database setting: `DATABASE_URL`.
    Default `.env.example` is Docker-first (`@postgres` host). For non-Docker local runs, set `DATABASE_URL` to `@localhost`.
+   Demo login defaults are `admin / admin1234` (configured via `APP_DEMO_USERNAME` and `APP_DEMO_PASSWORD`).
 
 3. Start the stack:
 
