@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_current_user
 from app.core.database import AsyncSessionLocal, get_db
-from app.graph.runtime import run_until_human_review
 from app.routes.utils import session_to_schema
 from app.schemas.audit import FinalAuditOut
 from app.schemas.drafts import DraftCompareOut
@@ -22,6 +21,7 @@ from app.schemas.sessions import AskRequest, AskResponse, SessionOut
 from app.services.draft_history import compare_session_drafts, get_session_draft, list_session_drafts
 from app.services.session_service import SessionService
 from app.services.workflow_events import WorkflowEvent, format_sse_comment, format_sse_event, workflow_event_bus
+from app.tasks.workflows import enqueue_ask_workflow
 
 router = APIRouter(prefix="/api/questions", tags=["questions"], dependencies=[Depends(require_current_user)])
 logger = logging.getLogger(__name__)
@@ -72,107 +72,103 @@ async def _load_session_schema_by_thread(thread_id: str) -> SessionOut | None:
 async def _workflow_stream_response(
     *,
     request: Request,
-    subscribe: Callable[[], Awaitable[asyncio.Queue[WorkflowEvent]]],
-    unsubscribe: Callable[[asyncio.Queue[WorkflowEvent]], Awaitable[None]],
+    subscribe: Callable[[], Any],
     load_session: Callable[[], Awaitable[SessionOut | None]],
     stream_ref: str,
     allow_initial_missing: bool = False,
 ) -> StreamingResponse:
-    queue = await subscribe()
-
     async def event_generator():
-        try:
-            snapshot = await load_session()
-            if snapshot is None:
-                if allow_initial_missing:
-                    yield format_sse_comment("waiting_for_session")
-                    snapshot = None
-                else:
-                    yield format_sse_event(
-                        event="workflow_state",
-                        data=_build_workflow_event_payload(
-                            session=None,
-                            reason="session_not_found",
-                            error="Session not found.",
-                            stream_ref=stream_ref,
-                        ),
-                    )
-                    return
-
-            if snapshot is not None:
-                yield format_sse_event(
-                    event="workflow_state",
-                    data=_build_workflow_event_payload(
-                        session=snapshot,
-                        reason="snapshot",
-                        stream_ref=stream_ref,
-                    ),
-                )
-
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    signal = await asyncio.wait_for(queue.get(), timeout=15.0)
-                except TimeoutError:
-                    yield format_sse_comment("keepalive")
-                    continue
-
-                try:
-                    current = await load_session()
-                except Exception as exc:  # pragma: no cover - defensive stream safety
-                    logger.warning("Failed to load live session snapshot stream_ref=%s error=%s", stream_ref, exc)
-                    yield format_sse_event(
-                        event="workflow_state",
-                        data=_build_workflow_event_payload(
-                            session=None,
-                            reason="stream_error",
-                            signal=signal,
-                            error="Failed to load live workflow state.",
-                            stream_ref=stream_ref,
-                        ),
-                    )
-                    continue
-
-                if current is None:
+        async with subscribe() as subscription:
+            try:
+                snapshot = await load_session()
+                if snapshot is None:
                     if allow_initial_missing:
-                        if signal.error:
-                            yield format_sse_event(
-                                event=signal.event,
-                                data=_build_workflow_event_payload(
-                                    session=None,
-                                    reason=signal.reason,
-                                    signal=signal,
-                                    stream_ref=stream_ref,
-                                ),
-                            )
-                        continue
+                        yield format_sse_comment("waiting_for_session")
+                        snapshot = None
+                    else:
+                        yield format_sse_event(
+                            event="workflow_state",
+                            data=_build_workflow_event_payload(
+                                session=None,
+                                reason="session_not_found",
+                                error="Session not found.",
+                                stream_ref=stream_ref,
+                            ),
+                        )
+                        return
+
+                if snapshot is not None:
                     yield format_sse_event(
                         event="workflow_state",
                         data=_build_workflow_event_payload(
-                            session=None,
-                            reason="session_not_found",
-                            signal=signal,
-                            error="Session not found.",
+                            session=snapshot,
+                            reason="snapshot",
                             stream_ref=stream_ref,
                         ),
                     )
-                    break
 
-                yield format_sse_event(
-                    event=signal.event,
-                    data=_build_workflow_event_payload(
-                        session=current,
-                        reason=signal.reason,
-                        signal=signal,
-                        stream_ref=stream_ref,
-                    ),
-                )
-        except asyncio.CancelledError:
-            logger.debug("Workflow SSE stream cancelled stream_ref=%s", stream_ref)
-            raise
-        finally:
-            await unsubscribe(queue)
+                while True:
+                    if await request.is_disconnected():
+                        break
+
+                    signal: WorkflowEvent | None = await subscription.next_event(timeout=15.0)
+                    if signal is None:
+                        yield format_sse_comment("keepalive")
+                        continue
+
+                    try:
+                        current = await load_session()
+                    except Exception as exc:  # pragma: no cover - defensive stream safety
+                        logger.warning("Failed to load live session snapshot stream_ref=%s error=%s", stream_ref, exc)
+                        yield format_sse_event(
+                            event="workflow_state",
+                            data=_build_workflow_event_payload(
+                                session=None,
+                                reason="stream_error",
+                                signal=signal,
+                                error="Failed to load live workflow state.",
+                                stream_ref=stream_ref,
+                            ),
+                        )
+                        continue
+
+                    if current is None:
+                        if allow_initial_missing:
+                            if signal.error:
+                                yield format_sse_event(
+                                    event=signal.event,
+                                    data=_build_workflow_event_payload(
+                                        session=None,
+                                        reason=signal.reason,
+                                        signal=signal,
+                                        stream_ref=stream_ref,
+                                    ),
+                                )
+                            continue
+                        yield format_sse_event(
+                            event="workflow_state",
+                            data=_build_workflow_event_payload(
+                                session=None,
+                                reason="session_not_found",
+                                signal=signal,
+                                error="Session not found.",
+                                stream_ref=stream_ref,
+                            ),
+                        )
+                        break
+
+                    yield format_sse_event(
+                        event=signal.event,
+                        data=_build_workflow_event_payload(
+                            session=current,
+                            reason=signal.reason,
+                            signal=signal,
+                            stream_ref=stream_ref,
+                        ),
+                    )
+            except asyncio.CancelledError:
+                logger.debug("Workflow SSE stream cancelled stream_ref=%s", stream_ref)
+                raise
 
     return StreamingResponse(
         event_generator(),
@@ -187,7 +183,7 @@ async def _workflow_stream_response(
 
 @router.post("/ask", response_model=AskResponse)
 async def ask_question(payload: AskRequest, db: AsyncSession = Depends(get_db)) -> AskResponse:
-    """Create a new RFP session and run graph until review pause."""
+    """Create a workflow session and enqueue graph execution."""
 
     question_text = payload.question_text.strip()
     logger.info(
@@ -198,15 +194,34 @@ async def ask_question(payload: AskRequest, db: AsyncSession = Depends(get_db)) 
 
     service = SessionService(db)
     thread_id = (payload.thread_id or "").strip() or str(uuid.uuid4())
-    logger.debug("Starting workflow execution for thread_id=%s", thread_id)
+    logger.debug("Queueing workflow execution for thread_id=%s", thread_id)
+
+    session = await service.create_or_get_session(
+        thread_id=thread_id,
+        question_text=question_text,
+        tone=payload.tone,
+    )
+    await workflow_event_bus.register_thread_session(
+        thread_id=thread_id,
+        session_id=str(session.id),
+    )
+    await workflow_event_bus.publish_thread(
+        thread_id=thread_id,
+        reason="workflow_queued",
+    )
+    await workflow_event_bus.publish_session(
+        session_id=str(session.id),
+        thread_id=thread_id,
+        reason="workflow_queued",
+        status="queued",
+    )
+
     try:
-        await run_until_human_review(
-            {
-                "thread_id": thread_id,
-                "question_text": question_text,
-                "tone": payload.tone,
-            },
+        task_id = enqueue_ask_workflow(
             thread_id=thread_id,
+            question_text=question_text,
+            tone=payload.tone,
+            session_id=str(session.id),
         )
     except Exception as exc:
         await workflow_event_bus.publish_thread(
@@ -214,24 +229,17 @@ async def ask_question(payload: AskRequest, db: AsyncSession = Depends(get_db)) 
             reason="workflow_error",
             error=str(exc),
         )
-        existing_session = await service.get_session_by_thread_id(thread_id)
-        if existing_session:
-            await workflow_event_bus.publish_session(
-                session_id=str(existing_session.id),
-                reason="workflow_error",
-                status="error",
-                error=str(exc),
-            )
-        raise
-    logger.info("Workflow paused for human review thread_id=%s", thread_id)
-
-    session = await service.get_session_by_thread_id(thread_id)
-    if not session:
-        logger.error("Workflow finished without persisted session thread_id=%s", thread_id)
-        raise HTTPException(status_code=500, detail="Session was not persisted by workflow.")
+        await workflow_event_bus.publish_session(
+            session_id=str(session.id),
+            thread_id=thread_id,
+            reason="workflow_error",
+            status="error",
+            error=str(exc),
+        )
+        raise HTTPException(status_code=503, detail="Failed to enqueue workflow.")
+    logger.info("Workflow queued thread_id=%s session_id=%s task_id=%s", thread_id, session.id, task_id)
 
     await db.refresh(session)
-    logger.info("Returning ask response session_id=%s status=%s", session.id, session.status)
     return AskResponse(session=session_to_schema(session))
 
 
@@ -266,7 +274,6 @@ async def stream_session_events(
     return await _workflow_stream_response(
         request=request,
         subscribe=lambda: workflow_event_bus.subscribe_session(str(session_id)),
-        unsubscribe=lambda queue: workflow_event_bus.unsubscribe_session(str(session_id), queue),
         load_session=lambda: _load_session_schema_by_id(session_id),
         stream_ref=f"session:{session_id}",
     )
@@ -291,7 +298,6 @@ async def stream_thread_events(
     return await _workflow_stream_response(
         request=request,
         subscribe=lambda: workflow_event_bus.subscribe_thread(thread_id),
-        unsubscribe=lambda queue: workflow_event_bus.unsubscribe_thread(thread_id, queue),
         load_session=lambda: _load_session_schema_by_thread(thread_id),
         stream_ref=f"thread:{thread_id}",
         allow_initial_missing=True,

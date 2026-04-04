@@ -10,12 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_current_user
 from app.core.database import get_db
-from app.graph.runtime import resume_from_review
 from app.routes.utils import session_to_schema
 from app.schemas.reviews import ReviewOut, ReviewRequest, ReviewResponse
 from app.services.review_service import ReviewService
 from app.services.session_service import SessionService
 from app.services.workflow_events import workflow_event_bus
+from app.tasks.workflows import enqueue_review_workflow
 
 router = APIRouter(prefix="/api/questions", tags=["reviews"], dependencies=[Depends(require_current_user)])
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ async def review_session(
     payload: ReviewRequest,
     db: AsyncSession = Depends(get_db),
 ) -> ReviewResponse:
-    """Persist a review action and resume the workflow from HITL checkpoint."""
+    """Persist a review action and enqueue workflow resume from HITL checkpoint."""
 
     logger.info(
         "Review request received session_id=%s action=%s",
@@ -98,35 +98,50 @@ async def review_session(
         has_evidence_gaps=has_evidence_gaps,
     )
     logger.debug("Review persisted session_id=%s action=%s", session_id, payload.reviewer_action)
+    session.status = "revision_requested" if payload.reviewer_action == "revise" else "awaiting_finalization"
+    session.current_node = "human_review"
+    await db.commit()
+    await db.refresh(session)
+
+    review_payload = {
+        "session_id": str(session_id),
+        "reviewer_action": payload.reviewer_action,
+        "review_comments": payload.review_comments or "",
+        "edited_answer": payload.edited_answer or "",
+        "reviewer_id": payload.reviewer_id or "",
+        "excluded_evidence_keys": payload.excluded_evidence_keys,
+        "reviewed_evidence_gaps": effective_gap_acknowledgement,
+        "evidence_gaps_acknowledged": effective_gap_acknowledgement,
+    }
+
     await workflow_event_bus.publish_session(
         session_id=str(session_id),
         reason="review_submitted",
-        status=payload.reviewer_action,
+        status=session.status,
+    )
+    await workflow_event_bus.publish_session(
+        session_id=str(session_id),
+        thread_id=thread_id,
+        reason="workflow_queued",
+        status=session.status,
     )
 
-    logger.info("Resuming workflow from review thread_id=%s", thread_id)
+    logger.info("Queueing review workflow resume thread_id=%s", thread_id)
     try:
-        await resume_from_review(
+        task_id = enqueue_review_workflow(
             thread_id=thread_id,
-            review_payload={
-                "session_id": str(session_id),
-                "reviewer_action": payload.reviewer_action,
-                "review_comments": payload.review_comments or "",
-                "edited_answer": payload.edited_answer or "",
-                "reviewer_id": payload.reviewer_id or "",
-                "excluded_evidence_keys": payload.excluded_evidence_keys,
-                "reviewed_evidence_gaps": effective_gap_acknowledgement,
-                "evidence_gaps_acknowledged": effective_gap_acknowledgement,
-            },
+            review_payload=review_payload,
         )
     except Exception as exc:
         await workflow_event_bus.publish_session(
             session_id=str(session_id),
+            thread_id=thread_id,
             reason="workflow_error",
             status="error",
             error=str(exc),
         )
-        raise
+        raise HTTPException(status_code=503, detail="Failed to enqueue review workflow.")
+    logger.info("Queued review workflow thread_id=%s session_id=%s task_id=%s", thread_id, session_id, task_id)
 
     refreshed = await session_service.get_session(session_id)
     if not refreshed:

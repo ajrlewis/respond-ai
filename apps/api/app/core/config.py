@@ -40,6 +40,18 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://respondai:respondai@localhost:5432/respondai",
         description="Primary Postgres database URL.",
     )
+    app_redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        description="Redis URL for SSE workflow pub/sub and health checks.",
+    )
+    app_celery_broker_url: str = Field(
+        default="redis://localhost:6379/1",
+        description="Celery broker URL.",
+    )
+    app_celery_result_backend: str = Field(
+        default="redis://localhost:6379/2",
+        description="Celery result backend URL.",
+    )
 
     ai_provider: str = Field(default="openai", description="Default AI provider (openai|anthropic|google).")
 

@@ -9,6 +9,14 @@ from app.routes import review as review_route
 from app.schemas.reviews import ReviewRequest
 
 
+class _FakeWorkflowEventBus:
+    def __init__(self) -> None:
+        self.published: list[dict] = []
+
+    async def publish_session(self, **kwargs) -> None:
+        self.published.append(kwargs)
+
+
 class _ExpiringSession:
     def __init__(self, thread_id: str) -> None:
         self._thread_id = thread_id
@@ -59,25 +67,29 @@ def test_review_route_uses_thread_id_before_review_commit(monkeypatch) -> None:
             initial_session.expired = True
             return SimpleNamespace(id=uuid4())
 
-    resume_calls: list[tuple[str, dict]] = []
+    enqueue_calls: list[tuple[str, dict]] = []
 
-    async def fake_resume_from_review(*, thread_id: str, review_payload: dict) -> dict:
-        resume_calls.append((thread_id, review_payload))
-        return {}
+    def fake_enqueue_review_workflow(*, thread_id: str, review_payload: dict) -> str:
+        enqueue_calls.append((thread_id, review_payload))
+        return "task-1"
 
     class FakeDB:
         async def refresh(self, obj) -> None:
             return None
 
+        async def commit(self) -> None:
+            return None
+
     monkeypatch.setattr(review_route, "SessionService", FakeSessionService)
     monkeypatch.setattr(review_route, "ReviewService", FakeReviewService)
-    monkeypatch.setattr(review_route, "resume_from_review", fake_resume_from_review)
+    monkeypatch.setattr(review_route, "enqueue_review_workflow", fake_enqueue_review_workflow)
+    monkeypatch.setattr(review_route, "workflow_event_bus", _FakeWorkflowEventBus())
 
     payload = ReviewRequest(reviewer_action="approve")
     result = asyncio.run(review_route.review_session(session_id=session_id, payload=payload, db=FakeDB()))
 
-    assert resume_calls
-    assert resume_calls[0][0] == "thread-123"
+    assert enqueue_calls
+    assert enqueue_calls[0][0] == "thread-123"
     assert result.session.id == session_id
 
 
@@ -116,19 +128,23 @@ def test_review_route_allows_revise_with_excluded_evidence(monkeypatch) -> None:
         async def create_review(self, **kwargs):
             return SimpleNamespace(id=uuid4())
 
-    resume_calls: list[tuple[str, dict]] = []
+    enqueue_calls: list[tuple[str, dict]] = []
 
-    async def fake_resume_from_review(*, thread_id: str, review_payload: dict) -> dict:
-        resume_calls.append((thread_id, review_payload))
-        return {}
+    def fake_enqueue_review_workflow(*, thread_id: str, review_payload: dict) -> str:
+        enqueue_calls.append((thread_id, review_payload))
+        return "task-1"
 
     class FakeDB:
         async def refresh(self, obj) -> None:
             return None
 
+        async def commit(self) -> None:
+            return None
+
     monkeypatch.setattr(review_route, "SessionService", FakeSessionService)
     monkeypatch.setattr(review_route, "ReviewService", FakeReviewService)
-    monkeypatch.setattr(review_route, "resume_from_review", fake_resume_from_review)
+    monkeypatch.setattr(review_route, "enqueue_review_workflow", fake_enqueue_review_workflow)
+    monkeypatch.setattr(review_route, "workflow_event_bus", _FakeWorkflowEventBus())
 
     payload = ReviewRequest(
         reviewer_action="revise",
@@ -136,8 +152,8 @@ def test_review_route_allows_revise_with_excluded_evidence(monkeypatch) -> None:
     )
     result = asyncio.run(review_route.review_session(session_id=session_id, payload=payload, db=FakeDB()))
 
-    assert resume_calls
-    assert resume_calls[0][1]["excluded_evidence_keys"] == ["chunk-1"]
+    assert enqueue_calls
+    assert enqueue_calls[0][1]["excluded_evidence_keys"] == ["chunk-1"]
     assert result.session.id == session_id
 
 
@@ -170,6 +186,7 @@ def test_review_route_blocks_approve_when_gaps_not_acknowledged(monkeypatch) -> 
 
     monkeypatch.setattr(review_route, "SessionService", FakeSessionService)
     monkeypatch.setattr(review_route, "ReviewService", FakeReviewService)
+    monkeypatch.setattr(review_route, "workflow_event_bus", _FakeWorkflowEventBus())
 
     payload = ReviewRequest(reviewer_action="approve", reviewed_evidence_gaps=False)
     try:
@@ -218,26 +235,30 @@ def test_review_route_allows_approve_when_gaps_already_acknowledged(monkeypatch)
             create_calls.append(kwargs)
             return SimpleNamespace(id=uuid4())
 
-    resume_calls: list[tuple[str, dict]] = []
+    enqueue_calls: list[tuple[str, dict]] = []
 
-    async def fake_resume_from_review(*, thread_id: str, review_payload: dict) -> dict:
-        resume_calls.append((thread_id, review_payload))
-        return {}
+    def fake_enqueue_review_workflow(*, thread_id: str, review_payload: dict) -> str:
+        enqueue_calls.append((thread_id, review_payload))
+        return "task-1"
 
     class FakeDB:
         async def refresh(self, obj) -> None:
             return None
 
+        async def commit(self) -> None:
+            return None
+
     monkeypatch.setattr(review_route, "SessionService", FakeSessionService)
     monkeypatch.setattr(review_route, "ReviewService", FakeReviewService)
-    monkeypatch.setattr(review_route, "resume_from_review", fake_resume_from_review)
+    monkeypatch.setattr(review_route, "enqueue_review_workflow", fake_enqueue_review_workflow)
+    monkeypatch.setattr(review_route, "workflow_event_bus", _FakeWorkflowEventBus())
 
     result = asyncio.run(review_route.review_session(session_id=session_id, payload=ReviewRequest(reviewer_action="approve"), db=FakeDB()))
 
     assert result.session.id == session_id
     assert create_calls
     assert create_calls[0]["evidence_gaps_acknowledged"] is True
-    assert resume_calls
+    assert enqueue_calls
 
 
 def test_review_route_blocks_actions_after_approval(monkeypatch) -> None:
@@ -270,6 +291,7 @@ def test_review_route_blocks_actions_after_approval(monkeypatch) -> None:
 
     monkeypatch.setattr(review_route, "SessionService", FakeSessionService)
     monkeypatch.setattr(review_route, "ReviewService", FakeReviewService)
+    monkeypatch.setattr(review_route, "workflow_event_bus", _FakeWorkflowEventBus())
 
     try:
         asyncio.run(

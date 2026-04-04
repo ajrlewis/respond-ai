@@ -34,18 +34,21 @@ async def ask_node(nodes, state: WorkflowState) -> WorkflowState:
                 await db.execute(select(RFPSession).where(RFPSession.graph_thread_id == thread_id))
             ).scalar_one_or_none()
             if existing:
+                existing_id = str(existing.id)
+                existing_status = existing.status
+                existing_tone = existing.tone
                 existing.current_node = "ask"
                 await db.commit()
                 await workflow_event_bus.register_thread_session(
                     thread_id=thread_id,
-                    session_id=str(existing.id),
+                    session_id=existing_id,
                 )
-                logger.info("Node ask reused existing session session_id=%s thread_id=%s", existing.id, thread_id)
+                logger.info("Node ask reused existing session session_id=%s thread_id=%s", existing_id, thread_id)
                 return {
                     "thread_id": thread_id,
-                    "session_id": str(existing.id),
-                    "status": existing.status,
-                    "tone": existing.tone,
+                    "session_id": existing_id,
+                    "status": existing_status,
+                    "tone": existing_tone,
                     "current_node": "ask",
                 }
 

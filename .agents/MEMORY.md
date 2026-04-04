@@ -63,7 +63,7 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - API logging level is configured via `LOGGING_LEVEL` (default `INFO`) in `apps/api/app/core/config.py` and applied by `app/core/logging.py`.
 - API emits lifecycle/debug logs across routes, graph runtime/nodes, and service/database layers using module loggers (`logging.getLogger(__name__)`).
 - API startup import smoke coverage lives in `apps/api/tests/test_app_startup.py` to catch startup-time import/runtime wiring regressions.
-- Session payloads include `current_node`, and workflow progress now streams over SSE via `GET /api/questions/{session_id}/events` (plus bootstrap `GET /api/questions/thread/{thread_id}/events` during initial ask execution).
+- Session payloads include `current_node`; workflow execution is Celery-backed and workflow progress streams over SSE via Redis pub/sub through `GET /api/questions/{session_id}/events` (plus bootstrap `GET /api/questions/thread/{thread_id}/events` during initial ask execution).
 - Session API payload includes structured `confidence` metadata and `answer_versions` snapshots for revision history/diff UX.
 - `POST /api/questions/{session_id}/review` accepts `excluded_evidence_keys` and `reviewed_evidence_gaps`; approve is rejected when evidence gaps exist and are not acknowledged.
 - Session payload now includes `evidence_gap_count`, `requires_gap_acknowledgement`, `evidence_gaps_acknowledged`, and `evidence_gaps_acknowledged_at` to support approval gating in review UI.
@@ -84,3 +84,5 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - Workflow/business API routers (`/api/questions`, `/api/documents`, `/api/evals`) require authenticated sessions via `app.core.auth.require_current_user`, while `/health` and `/auth/*` are public.
 - API CORS is restricted to `APP_WEB_ORIGIN` (allowlist, credentials enabled) instead of wildcard origins.
 - Review-summary confidence now stays anchored to `evaluate_evidence` output; drafting/revision stages attach metadata (`draft_metadata`, `revision_intent`) without re-scoring confidence fields.
+- Redis configuration uses `APP_REDIS_URL` (event fanout + health), `APP_CELERY_BROKER_URL` (Celery broker), and `APP_CELERY_RESULT_BACKEND` (Celery result backend).
+- Docker Compose runtime now includes `postgres`, `redis`, `api`, `worker`, and `web`; worker command is `uv run celery -A app.core.celery_app.celery_app worker --loglevel=INFO`.

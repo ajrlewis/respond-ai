@@ -1,11 +1,12 @@
 import asyncio
+from contextlib import asynccontextmanager
 import json
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from app.routes import ask as ask_route
 from app.schemas.sessions import ConfidenceOut, SessionOut
-from app.services.workflow_events import WorkflowEventBus
+from app.services.workflow_events import WorkflowEvent
 
 
 class _FakeRequest:
@@ -14,6 +15,61 @@ class _FakeRequest:
 
     async def is_disconnected(self) -> bool:
         return self.disconnected
+
+
+class _FakeSubscription:
+    def __init__(self) -> None:
+        self.queue: asyncio.Queue[WorkflowEvent] = asyncio.Queue(maxsize=16)
+
+    async def next_event(self, timeout: float) -> WorkflowEvent | None:
+        try:
+            return await asyncio.wait_for(self.queue.get(), timeout=timeout)
+        except TimeoutError:
+            return None
+
+
+class _FakeWorkflowEventBus:
+    def __init__(self) -> None:
+        self._session_subscribers: dict[str, list[_FakeSubscription]] = {}
+
+    @asynccontextmanager
+    async def subscribe_session(self, session_id: str):
+        sub = _FakeSubscription()
+        self._session_subscribers.setdefault(session_id, []).append(sub)
+        try:
+            yield sub
+        finally:
+            subscribers = self._session_subscribers.get(session_id, [])
+            if sub in subscribers:
+                subscribers.remove(sub)
+            if not subscribers:
+                self._session_subscribers.pop(session_id, None)
+
+    async def publish_session(
+        self,
+        *,
+        session_id: str | None,
+        reason: str,
+        node_name: str | None = None,
+        status: str | None = None,
+        error: str | None = None,
+        event: str = "workflow_state",
+        thread_id: str | None = None,
+    ) -> None:
+        if not session_id:
+            return
+        signal = WorkflowEvent(
+            reason=reason,
+            event=event,
+            node_name=node_name,
+            status=status,
+            error=error,
+        )
+        for subscriber in self._session_subscribers.get(session_id, []):
+            await subscriber.queue.put(signal)
+
+    async def session_subscriber_count(self, session_id: str) -> int:
+        return len(self._session_subscribers.get(session_id, []))
 
 
 def _decode_sse_frame(frame: bytes | str) -> tuple[str, dict]:
@@ -44,7 +100,7 @@ def _session_snapshot(*, session_id: UUID, status: str, current_node: str) -> Se
 
 def test_session_sse_emits_initial_snapshot_and_updates(monkeypatch) -> None:
     session_id = uuid4()
-    bus = WorkflowEventBus()
+    bus = _FakeWorkflowEventBus()
     snapshots = [
         _session_snapshot(session_id=session_id, status="draft", current_node="ask"),
         _session_snapshot(session_id=session_id, status="awaiting_review", current_node="draft_response"),

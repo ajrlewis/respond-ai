@@ -196,3 +196,71 @@ def test_finalize_response_persists_audit_snapshot_and_lock_metadata() -> None:
     assert fake_session.final_audit_payload["review_history"][0]["id"] == str(review_id)
     assert fake_session.answer_versions_payload[0]["status"] == "approved"
     assert fake_session.answer_versions_payload[0]["stage"] == "final"
+
+
+class _ExpiringAskSession:
+    def __init__(self) -> None:
+        self._id = uuid4()
+        self.expired = False
+        self.status = "draft"
+        self.tone = "formal"
+        self.current_node = "classify_and_plan"
+
+    @property
+    def id(self):
+        if self.expired:
+            raise RuntimeError("Expired ORM attribute access")
+        return self._id
+
+
+def test_ask_node_reuses_existing_session_without_expired_attribute_access(monkeypatch) -> None:
+    fake_session = _ExpiringAskSession()
+    register_calls: list[tuple[str, str]] = []
+
+    class FakeDB:
+        async def execute(self, _stmt):
+            class _Result:
+                def scalar_one_or_none(self):
+                    return fake_session
+
+            return _Result()
+
+        async def commit(self):
+            fake_session.expired = True
+
+    class FakeContext:
+        async def __aenter__(self):
+            return FakeDB()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    nodes = WorkflowNodes(session_factory=None)  # type: ignore[arg-type]
+
+    def fake_db(self):
+        return FakeContext()
+
+    async def fake_set_current_node(_session_id: str | None, _node_name: str) -> None:
+        return None
+
+    async def fake_register_thread_session(*, thread_id: str, session_id: str) -> None:
+        register_calls.append((thread_id, session_id))
+
+    nodes._db = types.MethodType(fake_db, nodes)  # type: ignore[assignment]
+    nodes._set_current_node = fake_set_current_node  # type: ignore[assignment]
+    monkeypatch.setattr("app.graph.nodes.ask.workflow_event_bus.register_thread_session", fake_register_thread_session)
+
+    result = asyncio.run(
+        nodes.ask(
+            {
+                "thread_id": "thread-existing",
+                "question_text": "How do you manage concentration risk?",
+                "tone": "formal",
+            }
+        )
+    )
+
+    assert result["session_id"] == str(fake_session._id)
+    assert result["status"] == "draft"
+    assert result["tone"] == "formal"
+    assert register_calls == [("thread-existing", str(fake_session._id))]

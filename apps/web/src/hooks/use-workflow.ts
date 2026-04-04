@@ -152,21 +152,42 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
 
         if (payload.error) {
           setError(payload.error);
+          if (isGeneratingDraftRef.current) {
+            setIsGeneratingDraft(false);
+            setGenerationProgress(null);
+            setLoading(false);
+          }
+          if (isSubmittingRevisionRef.current) {
+            setIsSubmittingRevision(false);
+            setRevisionProgress(null);
+            setLoading(false);
+          }
         }
 
         if (!payload.session) return;
 
         const nextSession = payload.session;
         setSession(nextSession);
+        const settledForReview = nextSession.status === "awaiting_review" || nextSession.status === "approved";
 
         if (isGeneratingDraftRef.current) {
           setGenerationProgress(nodeProgressLabel(nextSession));
+          if (settledForReview) {
+            setIsGeneratingDraft(false);
+            setLoading(false);
+          }
         }
         if (isSubmittingRevisionRef.current) {
           setRevisionProgress(nodeProgressLabel(nextSession));
+          if (settledForReview) {
+            setIsSubmittingRevision(false);
+            setLoading(false);
+          }
         }
 
         if (nextSession.status === "approved") {
+          setGenerationProgress(null);
+          setRevisionProgress(null);
           closeWorkflowStream();
         }
       };
@@ -244,11 +265,10 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
       openWorkflowStream({ sessionId: next.id });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit question.");
-      setGenerationProgress(null);
-      closeWorkflowStream();
-    } finally {
       setIsGeneratingDraft(false);
       setLoading(false);
+      setGenerationProgress(null);
+      closeWorkflowStream();
     }
   }
 
@@ -354,10 +374,9 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
       context.onSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to request revision.");
-      setRevisionProgress(null);
-    } finally {
       setIsSubmittingRevision(false);
       setLoading(false);
+      setRevisionProgress(null);
     }
   }
 

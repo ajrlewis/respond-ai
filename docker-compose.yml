@@ -18,6 +18,17 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   api:
     build:
       context: ./apps/api
@@ -27,6 +38,9 @@ services:
       - ./data:/app/data:ro
     environment:
       DATABASE_URL: postgresql+psycopg://respondai:respondai@postgres:5432/respondai
+      APP_REDIS_URL: ${APP_REDIS_URL:-redis://redis:6379/0}
+      APP_CELERY_BROKER_URL: ${APP_CELERY_BROKER_URL:-redis://redis:6379/1}
+      APP_CELERY_RESULT_BACKEND: ${APP_CELERY_RESULT_BACKEND:-redis://redis:6379/2}
       LOGGING_LEVEL: ${LOGGING_LEVEL:-INFO}
       OPENBLAS_NUM_THREADS: ${OPENBLAS_NUM_THREADS:-1}
       OMP_NUM_THREADS: ${OMP_NUM_THREADS:-1}
@@ -56,8 +70,55 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "8000:8000"
+
+  worker:
+    build:
+      context: ./apps/api
+    security_opt:
+      - seccomp=unconfined
+    volumes:
+      - ./data:/app/data:ro
+    command: ["uv", "run", "celery", "-A", "app.core.celery_app.celery_app", "worker", "--loglevel=INFO"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://respondai:respondai@postgres:5432/respondai
+      APP_REDIS_URL: ${APP_REDIS_URL:-redis://redis:6379/0}
+      APP_CELERY_BROKER_URL: ${APP_CELERY_BROKER_URL:-redis://redis:6379/1}
+      APP_CELERY_RESULT_BACKEND: ${APP_CELERY_RESULT_BACKEND:-redis://redis:6379/2}
+      LOGGING_LEVEL: ${LOGGING_LEVEL:-INFO}
+      OPENBLAS_NUM_THREADS: ${OPENBLAS_NUM_THREADS:-1}
+      OMP_NUM_THREADS: ${OMP_NUM_THREADS:-1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
+      LARGE_LLM_PROVIDER: ${LARGE_LLM_PROVIDER:-openai}
+      LARGE_LLM_MODEL: ${LARGE_LLM_MODEL:-gpt-4o}
+      SMALL_LLM_PROVIDER: ${SMALL_LLM_PROVIDER:-openai}
+      SMALL_LLM_MODEL: ${SMALL_LLM_MODEL:-gpt-4o-mini}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-1536}
+      EVAL_LLM_PROVIDER: ${EVAL_LLM_PROVIDER:-}
+      EVAL_LLM_MODEL: ${EVAL_LLM_MODEL:-}
+      AI_TEMPERATURE: ${AI_TEMPERATURE:-0}
+      AI_MAX_RETRIES: ${AI_MAX_RETRIES:-2}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-60}
+      ENABLE_LLM_JUDGE_EVALS: ${ENABLE_LLM_JUDGE_EVALS:-false}
+      RETRIEVAL_TOP_K: ${RETRIEVAL_TOP_K:-10}
+      FINAL_EVIDENCE_K: ${FINAL_EVIDENCE_K:-6}
+      APP_DEMO_USERNAME: ${APP_DEMO_USERNAME:-admin}
+      APP_DEMO_PASSWORD: ${APP_DEMO_PASSWORD:-admin1234}
+      APP_SESSION_SECRET: ${APP_SESSION_SECRET:-respondai-demo-session-secret}
+      APP_WEB_ORIGIN: ${APP_WEB_ORIGIN:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   web:
     build:

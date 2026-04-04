@@ -20,6 +20,8 @@ dependencies = [
   "langchain-google-genai>=2.0.0",
   "langgraph>=0.2.40",
   "langgraph-checkpoint-postgres>=2.0.5",
+  "celery>=5.4.0",
+  "redis>=5.0.0",
   "python-dotenv>=1.0.1",
   "itsdangerous>=2.2.0",
 ]

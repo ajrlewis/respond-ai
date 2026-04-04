@@ -16,6 +16,7 @@ from app.routes.documents import router as documents_router
 from app.routes.evals import router as evals_router
 from app.routes.health import router as health_router
 from app.routes.review import router as review_router
+from app.services.workflow_events import workflow_event_bus
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -54,6 +55,12 @@ def create_app(*, register_startup: bool = True) -> FastAPI:
             validate_ai_configuration()
             await init_database_async()
             logger.info("API startup initialization completed")
+
+        @application.on_event("shutdown")
+        async def on_shutdown() -> None:
+            """Release external clients created by API process."""
+
+            await workflow_event_bus.close()
 
     application.include_router(health_router)
     application.include_router(auth_router)

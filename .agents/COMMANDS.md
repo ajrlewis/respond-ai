@@ -14,6 +14,7 @@ Use these commands instead of guessing. If a command is missing or incorrect, up
 
 - Install deps: `cd apps/api && uv sync --extra dev`
 - Run API locally: `cd apps/api && uv run uvicorn app.main:app --reload`
+- Run Celery worker locally: `cd apps/api && uv run celery -A app.core.celery_app.celery_app worker --loglevel=INFO`
 - Run unit tests: `cd apps/api && uv run pytest -q`
 - Run full test suite: `cd apps/api && uv run pytest`
 - Seed markdown docs: `cd apps/api && uv run python scripts/seed_data.py`
@@ -41,6 +42,7 @@ Use these commands instead of guessing. If a command is missing or incorrect, up
 
 - Start full stack: `docker compose up --build`
 - Start in background: `docker compose up -d`
+- Start only Redis + API + worker: `docker compose up -d redis api worker`
 - Stop stack: `docker compose down`
 - View logs: `docker compose logs`
 

@@ -38,9 +38,12 @@ export function WorkflowShell({ currentUsername, isLoggingOut = false, onLogout 
   );
 
   const citationCount = citationView.citedEvidenceKeys.size;
-  const canUseWorkflowActions = !workflow.isApproved && draftHistory.isViewingCurrentDraft && !draftHistory.isCompareMode;
+  const isFinalizationInProgress = workflow.session?.status === "awaiting_finalization";
+  const canUseWorkflowActions =
+    !workflow.isApproved && !isFinalizationInProgress && draftHistory.isViewingCurrentDraft && !draftHistory.isCompareMode;
   const canApprove =
     !workflow.loading &&
+    !isFinalizationInProgress &&
     workflow.isGapAcknowledged &&
     (!draftHistory.selectedDraft || (draftHistory.selectedDraft.is_current && !draftHistory.isCompareMode));
 

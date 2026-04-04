@@ -47,6 +47,8 @@ respondai/
 - LangGraph for orchestrated workflow state transitions
 - PostgreSQL for business and source data
 - pgvector for semantic retrieval
+- Celery workers for background workflow execution
+- Redis for Celery broker/result backend and cross-instance workflow event fanout
 - LangGraph PostgresSaver for graph checkpoints and pause/resume
 - Provider-agnostic AI layer (`app/ai`) with configurable providers/models:
   - OpenAI
@@ -75,12 +77,14 @@ respondai/
 - revision history snapshots with inline diffing between draft versions
 - reviewer source exclusion controls for revision re-drafts
 
-### Realtime Model (MVP)
+### Realtime Model (MVP+ Runtime Upgrade)
 
-- user mutations (`ask`, `approve`, `revise`) stay as normal HTTP endpoints
-- server-push progress/status uses SSE (`text/event-stream`)
-- backend uses an in-memory per-session broadcaster (no Redis/WebSocket infra)
-- chosen for one-way workflow updates and interview-friendly simplicity
+- user mutations (`ask`, `approve`, `revise`) stay normal HTTP endpoints
+- FastAPI enqueues long-running workflow work to Celery and returns promptly
+- Celery worker executes LangGraph workflow and persists business state to Postgres
+- worker publishes workflow progress/state events to Redis channels
+- FastAPI SSE endpoints subscribe to Redis channels and stream updates to browser clients
+- SSE remains the browser-facing realtime transport (`text/event-stream`)
 
 ### Database Layout
 
@@ -245,7 +249,7 @@ cp .env.example .env
    Default `.env.example` is Docker-first (`@postgres` host). For non-Docker local runs, set `DATABASE_URL` to `@localhost`.
    Demo login defaults are `admin / admin1234` (configured via `APP_DEMO_USERNAME` and `APP_DEMO_PASSWORD`).
 
-3. Start the stack:
+3. Start the stack (`postgres`, `redis`, `api`, `worker`, `web`):
 
 ```bash
 docker compose up --build
@@ -269,6 +273,7 @@ docker compose exec api uv run python scripts/seed_data.py
 cp .env.example .env
 
 # set provider keys in .env (default: OPENAI_API_KEY)
+# ensure Postgres + Redis are running and reachable by DATABASE_URL / APP_REDIS_URL
 
 # terminal 1: API
 cd apps/api
@@ -277,13 +282,19 @@ uv run uvicorn app.main:app --reload
 ```
 
 ```bash
-# terminal 2: seed embeddings (run once API + Postgres are available)
+# terminal 2: worker
+cd apps/api
+uv run celery -A app.core.celery_app.celery_app worker --loglevel=INFO
+```
+
+```bash
+# terminal 3: seed embeddings (run once API + Postgres are available)
 cd apps/api
 uv run python scripts/seed_data.py
 ```
 
 ```bash
-# terminal 3: web
+# terminal 4: web
 cd apps/web
 bun install
 bun run dev
