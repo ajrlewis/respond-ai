@@ -1,0 +1,6 @@
+---
+description: Project-level coding agent instructions
+alwaysApply: true
+---
+
+Start by reading `AGENTS.md` at the repository root. Follow its file order and rules before making changes.
