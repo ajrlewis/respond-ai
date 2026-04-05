@@ -1,319 +1,298 @@
-# RespondAI
+# Respond AI
 
-RespondAI is a reusable AI system for drafting, reviewing, and approving **RFP/DDQ responses**, designed to be configured across different organisations.
+Workflow-first RFP/DDQ drafting system with evidence retrieval, human review gates, and auditable finalization.
 
-This MVP focuses on a sustainable asset manager scenario: an AI workflow that drafts high-quality, compliant answers grounded in internal materials and requires human approval before finalization.
+## Executive Summary
 
-## Why This Use Case
+Respond AI is a monorepo with:
 
-RFP/DDQ response work is high-value, repetitive, and document-heavy. It benefits from:
+- `apps/api`: FastAPI + LangGraph + Celery worker runtime
+- `apps/web`: Next.js reviewer UI
+- `postgres` + `pgvector`: document, workflow, and audit storage
+- `redis`: Celery broker/result backend and SSE event fanout
 
-- retrieval over existing institutional knowledge
-- structured generation with citations
-- a controlled human-in-the-loop (HITL) review gate
-
-RespondAI is intentionally a **governed workflow product**, not a generic chatbot.
-
-## Monorepo Structure
-
-```text
-respondai/
-  docker-compose.yml
-  .env.example
-  README.md
-  AGENTS.md
-  data/
-    docs/
-      *.md
-  apps/
-    api/
-      app/
-      scripts/
-      tests/
-      Dockerfile
-      pyproject.toml
-    web/
-      app/
-      src/
-      Dockerfile
-      package.json
-```
+The workflow is not chat-style freeform. It is an explicit graph with a human review interrupt, revision loop, and approval finalization.
 
 ## Architecture Overview
 
-### Backend (`apps/api`)
+```mermaid
+flowchart LR
+    Browser["Browser"] --> Web["Next.js Web (apps/web)"]
+    Web -->|HTTP + credentials| API["FastAPI API (apps/api)"]
+    API -->|Signed session cookie| Browser
 
-- FastAPI for API endpoints
-- LangGraph for orchestrated workflow state transitions
-- PostgreSQL for business and source data
-- pgvector for semantic retrieval
-- Celery workers for background workflow execution
-- Redis for Celery broker/result backend and cross-instance workflow event fanout
-- LangGraph PostgresSaver for graph checkpoints and pause/resume
-- Provider-agnostic AI layer (`app/ai`) with configurable providers/models:
-  - OpenAI
-  - Anthropic
-  - Google
-- Thin LangChain-backed model factory in `app/ai` (purpose-routed provider/model selection, no custom provider class hierarchy)
-- Purpose-based model routing from env (classification, cross-reference, drafting, revision, evaluation, embeddings)
-- Centralized markdown prompt assets in `apps/api/app/prompts/<task>/{system,user}.md`
-- Structured outputs (Pydantic) for:
-  - question classification
-  - evidence synthesis/cross-reference
-  - draft metadata extraction
-  - revision intent extraction
-  - optional LLM-judge evals
-- Schema boundaries:
-  - `apps/api/app/ai/schemas`: structured LLM output contracts
-  - `apps/api/app/schemas`: API/application/persistence-facing schemas
+    Web -->|EventSource /api/questions/*/events| API
+    API -->|SSE workflow_state stream| Web
 
-### Frontend (`apps/web`)
+    API -->|enqueue ask/review tasks| Redis[("Redis")]
+    Worker["Celery Worker (apps/api)"] -->|consume tasks| Redis
+    Worker -->|publish workflow updates| Redis
+    API -->|subscribe workflow:* channels| Redis
 
-- Next.js App Router + TypeScript
-- three-panel workflow UI (question intake, draft/review, evidence)
-- typed API client and explicit workflow actions (approve/revise)
-- Server-Sent Events (SSE) subscription for live workflow progress/state updates
-- citation click-to-focus linking between answer body and evidence cards
-- revision history snapshots with inline diffing between draft versions
-- reviewer source exclusion controls for revision re-drafts
-
-### Realtime Model (MVP+ Runtime Upgrade)
-
-- user mutations (`ask`, `approve`, `revise`) stay normal HTTP endpoints
-- FastAPI enqueues long-running workflow work to Celery and returns promptly
-- Celery worker executes LangGraph workflow and persists business state to Postgres
-- worker publishes workflow progress/state events to Redis channels
-- FastAPI SSE endpoints subscribe to Redis channels and stream updates to browser clients
-- SSE remains the browser-facing realtime transport (`text/event-stream`)
-
-### Database Layout
-
-Three separate persistence concerns are implemented:
-
-1. Source knowledge (RAG):
-
-- `documents`
-- `document_chunks`
-
-2. Runtime execution (LangGraph):
-
-- LangGraph checkpoints via PostgresSaver tables
-
-3. Business workflow:
-
-- `rfp_sessions`
-- `rfp_reviews`
-
-This separation keeps runtime mechanics independent from product state.
-
-## LangGraph Agent Flow
-
-```text
-ask
-→ classify_question
-→ retrieve_evidence
-→ cross_reference_evidence
-→ draft_response
-→ polish_response
-→ human_review
-├─ approve → finalize_response
-└─ revise  → revise_response → polish_response → human_review
+    Worker -->|read/write sessions, reviews, drafts,\naudit, telemetry, checkpoints| Postgres[("Postgres + pgvector")]
+    Worker -->|retrieve evidence chunks| Postgres
+    Seed["scripts/seed_data.py"] -->|ingest data/docs/*.md| Postgres
 ```
 
-### Node behavior summary
+## AI Workflow Graph
 
-1. `ask`: creates session and initializes state
-2. `classify_question`: structured classification (`question_type`, confidence, retrieval strategy)
-3. `retrieve_evidence`: hybrid semantic + keyword retrieval
-4. `cross_reference_evidence`: structured evidence synthesis (selected/rejected ids, contradictions, gaps)
-5. `draft_response`: plain-text investor-grade draft + structured draft metadata
-6. `polish_response`: constrained tone/parser pass for formal investor style
-7. `human_review`: HITL interrupt/pause point
-8. `revise_response`: plain-text revision + structured revision intent/metadata
-9. `finalize_response`: persists approved final answer
+```mermaid
+flowchart TD
+    START([START]) --> ask
+    ask --> classify_and_plan
+    classify_and_plan --> adaptive_retrieve
+    adaptive_retrieve --> evaluate_evidence
 
-## Seed Data Summary
+    evaluate_evidence -->|recommended_action=retrieve_more AND retry_count < 1| adaptive_retrieve
+    evaluate_evidence -->|otherwise| draft_response
 
-`data/docs/*.md` contains internal-style knowledge documents for the sustainable asset manager demo (firm overview, strategy, ESG, portfolio examples, process, risk, team, prior answers).
+    draft_response --> polish_response
+    polish_response --> human_review
 
-These markdown files are assumed to originate from PDF-to-markdown conversion (Docling or similar). The ingestion pipeline in `apps/api/scripts/seed_data.py`:
+    human_review -->|reviewer_action=revise| revise_response
+    revise_response --> polish_response
 
-1. reads markdown files
-2. parses heading structure
-3. performs recursive chunking
-4. generates embeddings via configured embedding provider/model
-5. stores documents/chunks in PostgreSQL + pgvector
-
-This is the RAG foundation used by the workflow.
-
-## AI Configuration
-
-The AI layer is provider-agnostic and supports configurable model selection across OpenAI, Anthropic, and Google. Structured outputs are used for classification, evidence selection, and evaluation tasks to improve reliability and reduce brittle prompt parsing.
-
-At minimum, configure:
-
-```env
-AI_PROVIDER=openai
-LARGE_LLM_PROVIDER=openai
-LARGE_LLM_MODEL=gpt-4o
-SMALL_LLM_PROVIDER=openai
-SMALL_LLM_MODEL=gpt-4o-mini
-EMBEDDING_PROVIDER=openai
-EMBEDDING_MODEL=text-embedding-3-small
-
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
-GOOGLE_API_KEY=
+    human_review -->|reviewer_action=approve| finalize_response
+    finalize_response --> END([END])
 ```
 
-Optional controls:
+Implementation notes:
 
-```env
-AI_TEMPERATURE=0
-AI_MAX_RETRIES=2
-AI_TIMEOUT_SECONDS=60
-ENABLE_LLM_JUDGE_EVALS=false
-EVAL_LLM_PROVIDER=
-EVAL_LLM_MODEL=
+- `human_review` is a LangGraph interrupt; resume is triggered by `POST /api/questions/{session_id}/review`.
+- Retrieval retry is bounded to one extra retrieval pass (`retry_count < 1`).
+- Approval writes immutable final audit metadata and locks further review actions for that session.
+
+## Realtime Workflow Updates (SSE)
+
+- Ask flow starts with `POST /api/questions/ask` (returns quickly after queueing Celery task).
+- Web subscribes to `GET /api/questions/thread/{thread_id}/events` during bootstrap, then to `GET /api/questions/{session_id}/events`.
+- Worker publishes lifecycle events to Redis pub/sub; API streams enriched session snapshots over SSE.
+- No polling path is used by the current web workflow.
+
+## Key Features
+
+- Structured retrieval planning and adaptive evidence retrieval
+- Evidence evaluation before drafting
+- Human review gate with approve/revise branching
+- Draft version history and draft-to-draft diff endpoints
+- Evidence exclusion controls in revision flow
+- Evidence-gap acknowledgement gate before approval
+- Immutable final audit snapshot (`GET /api/questions/{session_id}/audit`)
+- Alembic-managed schema with startup revision checks
+
+## Prerequisites
+
+- Docker + Docker Compose
+- Optional local runtime tools:
+  - Python 3.11+ and `uv`
+  - Bun 1.x
+
+## Environment Configuration
+
+Copy:
+
+```bash
+cp .env.example .env
 ```
 
-Mixed-provider deployments are supported. Example:
+### Core Runtime
 
-- `LARGE_LLM_PROVIDER=anthropic`
-- `SMALL_LLM_PROVIDER=openai`
-- `EMBEDDING_PROVIDER=openai`
+- `DATABASE_URL`
+- `APP_REDIS_URL`
+- `APP_CELERY_BROKER_URL`
+- `APP_CELERY_RESULT_BACKEND`
+- `APP_SESSION_SECRET`
+- `APP_WEB_ORIGIN`
+- `NEXT_PUBLIC_API_BASE_URL` (web -> API base URL)
 
-Note: `EMBEDDING_PROVIDER=anthropic` is not supported in this stack; use `openai` or `google`.
+### AI Provider Configuration
 
-## Demo Auth + CORS
+The API validates AI config at startup (`validate_ai_configuration()`), so missing required keys fail startup.
 
-This MVP uses a lightweight cookie-based demo session auth layer:
+- Defaults use OpenAI for large/small chat + embeddings:
+  - `AI_PROVIDER=openai`
+  - `LARGE_LLM_PROVIDER=openai`
+  - `SMALL_LLM_PROVIDER=openai`
+  - `EMBEDDING_PROVIDER=openai`
+  - Requires `OPENAI_API_KEY`
+- If using Anthropic for chat, embeddings must still use OpenAI or Google.
+- `EMBEDDING_PROVIDER=anthropic` is unsupported.
+- If `ENABLE_LLM_JUDGE_EVALS=true`, configure `EVAL_LLM_MODEL` (and provider key for `EVAL_LLM_PROVIDER`).
 
-```env
-APP_DEMO_USERNAME=admin
-APP_DEMO_PASSWORD=admin1234
-APP_SESSION_SECRET=respondai-demo-session-secret
-APP_WEB_ORIGIN=http://localhost:3000
+### Auth / Session
+
+- `APP_DEMO_USERNAME`
+- `APP_DEMO_PASSWORD`
+- `APP_SESSION_SECRET`
+- `APP_ENV` (`production` enables secure session cookie flag)
+
+### Optional Tuning
+
+- `LOGGING_LEVEL`
+- `RETRIEVAL_TOP_K`
+- `FINAL_EVIDENCE_K`
+- `AI_TEMPERATURE`
+- `AI_MAX_RETRIES`
+- `AI_TIMEOUT_SECONDS`
+- `MODEL_PRICING_JSON`
+
+Note: Docker Compose injects variables listed in `docker-compose.yml` into `api`/`worker`. If you want `APP_ENV` or `MODEL_PRICING_JSON` inside Docker containers, add them to those service `environment` blocks.
+
+## Docker Setup
+
+### First-Time Bootstrap (Fresh DB)
+
+`api` startup checks Alembic head and will fail if migrations were not applied yet. Use this order:
+
+Set required provider API keys in `.env` before running seed/migrations.
+
+```bash
+cp .env.example .env
+docker compose build api worker web
+docker compose up -d postgres redis
+docker compose run --rm api uv run alembic upgrade head
+docker compose run --rm api uv run python scripts/seed_data.py
+docker compose up -d api worker web
 ```
 
-- Login endpoint: `POST /auth/login`
-- Logout endpoint: `POST /auth/logout`
-- Session check endpoint: `GET /auth/me`
-- Workflow/API routes under `/api/*` require authentication and return `401` when logged out.
-- CORS is restricted to `APP_WEB_ORIGIN` and credentials are enabled for cookie auth.
+Verify:
 
-## API Endpoints
+- Web: http://localhost:3000
+- API: http://localhost:8000
+- Health: http://localhost:8000/health
 
-- `GET /health`
-- `POST /auth/login`
-- `POST /auth/logout`
-- `GET /auth/me`
-- `POST /api/questions/ask`
-- `POST /api/questions/{session_id}/review`
-- `GET /api/questions/{session_id}`
-- `GET /api/questions/{session_id}/events` (SSE)
-- `GET /api/questions/thread/{thread_id}/events` (SSE bootstrap during initial ask run)
-- `GET /api/questions/{session_id}/drafts`
-- `GET /api/questions/{session_id}/drafts/{draft_id}`
-- `GET /api/questions/{session_id}/drafts/compare?left=<id>&right=<id>`
-- `GET /api/questions/{session_id}/history`
-- `GET /api/documents`
+### Normal Restart
+
+```bash
+docker compose up -d
+```
+
+If migrations changed and `api` is already running:
+
+```bash
+docker compose exec -T api uv run alembic upgrade head
+```
+
+If `api` is not running yet, use:
+
+```bash
+docker compose run --rm api uv run alembic upgrade head
+```
+
+## Local Dev (Without Dockerized API/Web)
+
+If you run API on host, set `DATABASE_URL` to a host-reachable DB (for example `localhost`, not `postgres`).
+
+```bash
+docker compose up -d postgres redis
+cd apps/api && uv sync --extra dev
+cd apps/api && uv run alembic upgrade head
+cd apps/api && uv run python scripts/seed_data.py
+cd apps/api && uv run uvicorn app.main:app --reload
+cd apps/api && uv run celery -A app.core.celery_app.celery_app worker --loglevel=INFO
+cd apps/web && bun install --frozen-lockfile
+cd apps/web && bun run dev
+```
+
+## Database Migrations and Seeding
+
+### Apply Migrations
+
+```bash
+docker compose exec -T api uv run alembic upgrade head
+```
+
+### Create Migration
+
+```bash
+docker compose exec -T api uv run alembic revision --autogenerate -m "describe change"
+```
+
+### Seed Documents
+
+```bash
+docker compose exec -T api uv run python scripts/seed_data.py
+```
+
+Seed behavior:
+
+- Reads markdown from `data/docs/*.md`
+- Replaces previously-seeded rows by filename (safe to rerun)
+- Requires migrations to be current before it runs
+- Not required for auth/login, but required for meaningful retrieval-backed answers
+
+### Schema Change Workflow
+
+1. Update SQLAlchemy models in `apps/api/app/db/models.py`.
+2. Generate migration.
+3. Review generated migration file in `apps/api/alembic/versions/`.
+4. Apply migration.
+5. Rerun seed if source docs changed.
+
+## Authentication and Access
+
+- Login: `POST /auth/login`
+- Logout: `POST /auth/logout`
+- Current user: `GET /auth/me`
+- Default demo credentials:
+  - username: `admin`
+  - password: `admin1234`
+
+Protected routers require authenticated session cookie:
+
+- `/api/questions/*`
+- `/api/documents`
+- `/api/evals/*`
+
+Public endpoints:
+
+- `/health`
+- `/auth/*`
+
+CORS is allowlist-based from `APP_WEB_ORIGIN` (credentials enabled); wildcard origin is not used.
+
+## Useful Commands
+
+```bash
+# Start / rebuild
+docker compose up -d
+docker compose up -d --build
+
+# Logs
+docker compose logs -f api
+docker compose logs -f worker
+docker compose logs -f web
+
+# DB + seed
+docker compose exec -T api uv run alembic current
+docker compose exec -T api uv run alembic upgrade head
+docker compose exec -T api uv run python scripts/seed_data.py
+
+# Evals
+docker compose exec -T api uv run python scripts/run_evals.py --limit 50
+
+# Health
+curl -s http://localhost:8000/health
+
+# Stop
+docker compose down
+```
 
 ## Design Decisions
 
-- **Postgres for app + vector storage**: simple operational model and strong relational + retrieval support.
-- **LangGraph PostgresSaver**: durable checkpoints and clean pause/resume for HITL review.
-- **Separate business tables from checkpoint state**: product state remains clear and queryable without coupling to internal graph mechanics.
-- **Scoped single-workflow MVP**: one high-value workflow done well over an overbuilt multi-agent system.
+- SSE over polling/websockets for server-to-client workflow state streaming.
+- Celery to decouple long-running graph execution from API request latency.
+- Redis as both Celery transport and cross-process workflow event fanout.
+- Alembic revision checks at startup to prevent running against stale schema.
 
-## Future Extensions
+## Current Limitations
 
-- organization-level configuration profiles (tone, templates, taxonomies)
-- additional workflows (DDQs, IC memos, portfolio analytics)
-- integrations with CRM/data warehouse/document systems
-- MCP exposure for external tool orchestration
-- optional constrained web research where policy allows
-- stronger auth, audit, and compliance controls
+- Demo auth only (single credential pair from env, no RBAC/IdP).
+- Redis pub/sub event fanout is ephemeral, not durable replay.
+- Planner node is fail-fast: if retrieval planning model is unavailable, ask workflow fails.
+- Seed pipeline ingests local markdown files only.
+- Web test script currently runs build-only checks (no dedicated UI test suite).
 
-## How To Run
+## Summary
 
-1. Copy environment variables:
-
-```bash
-cp .env.example .env
-```
-
-2. Set provider keys in `.env` for any providers you configure.
-   Default config requires `OPENAI_API_KEY`.
-   The app uses a single database setting: `DATABASE_URL`.
-   Default `.env.example` is Docker-first (`@postgres` host). For non-Docker local runs, set `DATABASE_URL` to `@localhost`.
-   Demo login defaults are `admin / admin1234` (configured via `APP_DEMO_USERNAME` and `APP_DEMO_PASSWORD`).
-
-3. Start the stack (`postgres`, `redis`, `api`, `worker`, `web`):
-
-```bash
-docker compose up --build
-```
-
-4. Seed markdown docs into Postgres + pgvector:
-
-```bash
-docker compose exec api uv run python scripts/seed_data.py
-```
-
-5. Open:
-
-- Web UI: `http://localhost:3000`
-- API docs: `http://localhost:8000/docs`
-
-## Non-Docker Local Run (Copy/Paste)
-
-```bash
-# from repo root
-cp .env.example .env
-
-# set provider keys in .env (default: OPENAI_API_KEY)
-# ensure Postgres + Redis are running and reachable by DATABASE_URL / APP_REDIS_URL
-
-# terminal 1: API
-cd apps/api
-uv sync --extra dev
-uv run uvicorn app.main:app --reload
-```
-
-```bash
-# terminal 2: worker
-cd apps/api
-uv run celery -A app.core.celery_app.celery_app worker --loglevel=INFO
-```
-
-```bash
-# terminal 3: seed embeddings (run once API + Postgres are available)
-cd apps/api
-uv run python scripts/seed_data.py
-```
-
-```bash
-# terminal 4: web
-cd apps/web
-bun install
-bun run dev
-```
-
-## Docker commands
-
-```bash
-# Build and start everything
-docker compose up -d --build --remove-orphans
-
-# Remove dangling images
-docker
-
-# Seed the database
-docker compose exec -T api uv run python scripts/seed_data.py
-# Inspect the database
-docker compose exec postgres psql -U respondai -d respondai
-```
-
-web: http://localhost:3000/
-api: http://localhost:8000/docs
+This repository is a workflow-governed AI drafting system with explicit state transitions, human approval control, and auditable finalization. The setup steps above mirror the current runtime behavior, including migration-first startup and SSE-driven progress updates.
