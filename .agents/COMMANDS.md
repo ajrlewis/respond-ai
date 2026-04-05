@@ -26,8 +26,11 @@ Use these commands instead of guessing. If a command is missing or incorrect, up
 
 - Create migration: `cd apps/api && uv run alembic revision --autogenerate -m "<message>"`
 - Apply migrations: `cd apps/api && uv run alembic upgrade head`
+- Stamp existing schema as current head: `cd apps/api && uv run alembic stamp head`
 - Roll back one migration: `cd apps/api && uv run alembic downgrade -1`
 - Show current revision: `cd apps/api && uv run alembic current`
+- Docker apply migrations: `docker compose exec -T api uv run alembic upgrade head`
+- Docker create migration: `docker compose exec -T api uv run alembic revision --autogenerate -m "<message>"`
 
 ## Web (`apps/web`)
 

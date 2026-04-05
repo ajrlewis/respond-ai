@@ -11,7 +11,7 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 from app.core.database import SessionLocal
-from app.db.migrations_or_init import init_database
+from app.db.migration_check import assert_schema_current_sync
 from app.services.ingestion import IngestionService
 
 
@@ -37,7 +37,7 @@ def main() -> None:
 
     docs_dir = _resolve_docs_dir()
 
-    init_database()
+    assert_schema_current_sync()
 
     with SessionLocal() as db:
         service = IngestionService(db)

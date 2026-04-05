@@ -9,7 +9,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.ai.factory import validate_ai_configuration
 from app.core.config import settings
 from app.core.logging import configure_logging
-from app.db.migrations_or_init import init_database_async
+from app.db.migration_check import assert_schema_current_async
 from app.routes.ask import router as ask_router
 from app.routes.auth import router as auth_router
 from app.routes.documents import router as documents_router
@@ -49,11 +49,11 @@ def create_app(*, register_startup: bool = True) -> FastAPI:
 
         @application.on_event("startup")
         async def on_startup() -> None:
-            """Bootstrap database schema for local MVP."""
+            """Validate startup prerequisites and schema revision state."""
 
             logger.info("API startup initialization started")
             validate_ai_configuration()
-            await init_database_async()
+            await assert_schema_current_async()
             logger.info("API startup initialization completed")
 
         @application.on_event("shutdown")
