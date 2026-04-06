@@ -2,7 +2,7 @@
 
 ## Before finishing
 
-- [ ] Branch created and scoped to one feature or fix
+- [ ] Feature branch created and checked out before first file edit (or deviation explicitly called out)
 - [ ] Change set is small and focused (no unrelated refactors)
 - [ ] New or changed behavior has tests added or updated
 - [ ] Relevant tests for impacted API/web areas (`apps/api`, `apps/web`) have been run
@@ -19,4 +19,5 @@
 - [ ] If pgvector usage changed, related queries/indexes verified
 
 - [ ] Commands, workflows, or docs updated if behavior changed
+- [ ] Changes are committed on the feature branch with a clear commit message (unless user asked not to commit)
 - [ ] PR notes include what changed, how it was tested, and any risks or rollout considerations

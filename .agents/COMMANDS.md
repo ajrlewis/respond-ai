@@ -5,6 +5,8 @@ Use these commands instead of guessing. If a command is missing or incorrect, up
 ## Branching
 
 - Create feature branch: `git checkout -b feat/<short-description>`
+- Show current branch: `git branch --show-current`
+- Commit staged changes: `git commit -m "<type>(<scope>): <summary>"`
 
 ## API (`apps/api`)
 
@@ -39,6 +41,8 @@ Use these commands instead of guessing. If a command is missing or incorrect, up
 - Install deps: `cd apps/web && bun install --frozen-lockfile`
 - Run app locally: `cd apps/web && bun run dev`
 - Run tests: `cd apps/web && bun run test`
+- Run tests in watch mode: `cd apps/web && bun run test:watch`
+- Run tests with coverage: `cd apps/web && bun run test:coverage`
 - Build: `cd apps/web && bun run build`
 
 ## Docker
