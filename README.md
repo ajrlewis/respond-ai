@@ -214,6 +214,18 @@ docker compose exec -T api uv run alembic revision --autogenerate -m "describe c
 docker compose exec -T api uv run python scripts/seed_data.py
 ```
 
+### Ingestion and Vector Storage Flow
+
+```mermaid
+flowchart LR
+    A["Local markdown docs<br/>data/docs/*.md"] --> B["Load markdown files"]
+    B --> C["Chunk content"]
+    C --> D["Generate embeddings"]
+    C --> E["Extract metadata<br/>(source, filename, chunk index)"]
+    D --> F[("PostgreSQL + pgvector")]
+    E --> F
+```
+
 Seed behavior:
 
 - Reads markdown from `data/docs/*.md`
