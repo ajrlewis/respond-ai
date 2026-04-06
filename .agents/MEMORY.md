@@ -80,12 +80,15 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - Eval API endpoints are `POST /api/evals/run`, `GET /api/evals/runs`, and `GET /api/evals/runs/{run_id}`.
 - Graph node implementations are split under `apps/api/app/graph/nodes/` as thin orchestration adapters; planning, evidence analysis, drafting/revision/polish, and finalization business logic live in `apps/api/app/services/{planning,evidence_analysis,drafting,finalization}.py`.
 - Web workflow UI is organized under `apps/web/src/components/workflow/` with orchestration hooks in `apps/web/src/hooks/use-workflow.ts` and `apps/web/src/hooks/use-draft-history.ts`; `apps/web/src/components/workflow-shell.tsx` is a thin re-export to the workflow container.
+- Frontend tests in `apps/web` use Vitest + React Testing Library + MSW with shared setup at `apps/web/src/test/setup.ts`; commands are `cd apps/web && bun run test`, `bun run test:watch`, and `bun run test:coverage`.
 - Demo authentication endpoints are `POST /auth/login`, `POST /auth/logout`, and `GET /auth/me`, backed by FastAPI signed cookie sessions (`SessionMiddleware`).
 - Workflow/business API routers (`/api/questions`, `/api/documents`, `/api/evals`) require authenticated sessions via `app.core.auth.require_current_user`, while `/health` and `/auth/*` are public.
 - API CORS is restricted to `APP_WEB_ORIGIN` (allowlist, credentials enabled) instead of wildcard origins.
 - Review-summary confidence now stays anchored to `evaluate_evidence` output; drafting/revision stages attach metadata (`draft_metadata`, `revision_intent`) without re-scoring confidence fields.
 - Redis configuration uses `APP_REDIS_URL` (event fanout + health), `APP_CELERY_BROKER_URL` (Celery broker), and `APP_CELERY_RESULT_BACKEND` (Celery result backend).
 - Docker Compose runtime now includes `postgres`, `redis`, `api`, `worker`, and `web`; worker command is `uv run celery -A app.core.celery_app.celery_app worker --loglevel=INFO`.
+- Dockerized API tests run with `docker compose run --rm api uv run pytest -q`.
+- Dockerized web tests run with `docker compose run --rm web bun run test` (web image uses Bun `1.2.23-alpine`).
 - Database schema is migration-controlled via Alembic (`apps/api/alembic`, `apps/api/alembic.ini`) with baseline revision `146703db33e7`.
 - API startup validates schema revision state via `app.db.migration_check.assert_schema_current_async` and no longer performs `create_all` / startup `ALTER TABLE` patching.
 - Seed script (`apps/api/scripts/seed_data.py`) requires Alembic migrations to be applied first and checks schema revision via `assert_schema_current_sync`.

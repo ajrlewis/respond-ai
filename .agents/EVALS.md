@@ -7,6 +7,7 @@ The goal is to verify that the change is complete, follows repo instructions, an
 ## Workflow eval
 
 - Did the work follow `.agents/WORKFLOWS.md`?
+- Was a feature branch created before the first code edit? If not, is the deviation explicitly acknowledged?
 - Was the change kept small and scoped to the task?
 - Were unrelated refactors avoided?
 - Were docs or agent instructions updated if behavior, commands, or workflows changed?
@@ -56,6 +57,7 @@ Before finishing, confirm that the final response clearly states:
 - what changed
 - what tests were run
 - what was not verified
+- the final branch name and commit message (or explicitly that no commit was made by request)
 - any remaining risks, assumptions, or follow-up work
 
 If any checklist item was not completed, say so explicitly instead of implying full completion.

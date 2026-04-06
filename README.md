@@ -275,6 +275,10 @@ docker compose logs -f api
 docker compose logs -f worker
 docker compose logs -f web
 
+# Tests
+docker compose run --rm api uv run pytest -q
+docker compose run --rm web bun run test
+
 # DB + seed
 docker compose exec -T api uv run alembic current
 docker compose exec -T api uv run alembic upgrade head
@@ -303,7 +307,6 @@ docker compose down
 - Redis pub/sub event fanout is ephemeral, not durable replay.
 - Planner node is fail-fast: if retrieval planning model is unavailable, ask workflow fails.
 - Seed pipeline ingests local markdown files only.
-- Web test script currently runs build-only checks (no dedicated UI test suite).
 
 ## Summary
 

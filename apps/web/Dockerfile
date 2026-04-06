@@ -1,5 +1,5 @@
-# Use the official Bun image (Alpine version for smaller size)
-FROM oven/bun:1.1-alpine AS base
+# Use a Bun version compatible with the Vitest setup in this repo.
+FROM oven/bun:1.2.23-alpine AS base
 WORKDIR /app
 
 # 1. Install dependencies only when package.json or bun.lockb changes
@@ -14,14 +14,12 @@ COPY . .
 RUN bun run build
 
 # 4. Production Environment
-FROM oven/bun:1.1-alpine AS release
+FROM oven/bun:1.2.23-alpine AS release
 WORKDIR /app
 
-# Copy only the necessary build artifacts from the base stage
-COPY --from=base /app/.next ./.next
-COPY --from=base /app/public ./public
-COPY --from=base /app/package.json ./package.json
-COPY --from=base /app/node_modules ./node_modules
+# Copy the built app plus source/tests so `docker compose run --rm web bun run test`
+# can execute in this image as well.
+COPY --from=base /app /app
 
 EXPOSE 3000
 

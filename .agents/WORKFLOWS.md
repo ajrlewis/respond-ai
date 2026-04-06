@@ -11,13 +11,15 @@ Use these steps for each non-trivial task.
 ## Feature workflow
 
 1. Start from a clean working tree and an up-to-date default branch.
-2. Create and checkout a feature branch.
-3. Keep the change small and scoped to one objective.
-4. Implement the change and add or update tests in the same branch.
-5. Run relevant tests for touched areas before finishing.
-6. If runtime, dependency, build, or deployment behavior changed, update related Docker/dev/prod configuration as needed.
-7. Update docs or agent instructions if commands, workflows, or behavior changed.
-8. Prepare a PR summary with what changed, how it was tested, and any rollout or follow-up notes.
+2. Create and checkout a feature branch **before** making any file edits.
+3. If you started editing before creating a branch, immediately create/switch to a feature branch, keep the existing changes, and explicitly note the deviation in your final summary.
+4. Keep the change small and scoped to one objective.
+5. Implement the change and add or update tests in the same branch.
+6. Run relevant tests for touched areas before finishing.
+7. If runtime, dependency, build, or deployment behavior changed, update related Docker/dev/prod configuration as needed.
+8. Update docs or agent instructions if commands, workflows, or behavior changed.
+9. Commit the changes on the feature branch with a clear, descriptive message (for example: `feat(web): add vitest setup`). If the user requests no commit, state that explicitly in the final summary.
+10. Prepare a PR summary with what changed, how it was tested, and any rollout or follow-up notes.
 
 ## Docker / containerization
 

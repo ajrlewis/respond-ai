@@ -5,6 +5,8 @@ Use these commands instead of guessing. If a command is missing or incorrect, up
 ## Branching
 
 - Create feature branch: `git checkout -b feat/<short-description>`
+- Show current branch: `git branch --show-current`
+- Commit staged changes: `git commit -m "<type>(<scope>): <summary>"`
 
 ## API (`apps/api`)
 
@@ -39,6 +41,8 @@ Use these commands instead of guessing. If a command is missing or incorrect, up
 - Install deps: `cd apps/web && bun install --frozen-lockfile`
 - Run app locally: `cd apps/web && bun run dev`
 - Run tests: `cd apps/web && bun run test`
+- Run tests in watch mode: `cd apps/web && bun run test:watch`
+- Run tests with coverage: `cd apps/web && bun run test:coverage`
 - Build: `cd apps/web && bun run build`
 
 ## Docker
@@ -46,6 +50,8 @@ Use these commands instead of guessing. If a command is missing or incorrect, up
 - Start full stack: `docker compose up --build`
 - Start in background: `docker compose up -d`
 - Start only Redis + API + worker: `docker compose up -d redis api worker`
+- Run API tests in container: `docker compose run --rm api uv run pytest -q`
+- Run web tests in container: `docker compose run --rm web bun run test`
 - Stop stack: `docker compose down`
 - View logs: `docker compose logs`
 
