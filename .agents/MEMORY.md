@@ -87,6 +87,8 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - Review-summary confidence now stays anchored to `evaluate_evidence` output; drafting/revision stages attach metadata (`draft_metadata`, `revision_intent`) without re-scoring confidence fields.
 - Redis configuration uses `APP_REDIS_URL` (event fanout + health), `APP_CELERY_BROKER_URL` (Celery broker), and `APP_CELERY_RESULT_BACKEND` (Celery result backend).
 - Docker Compose runtime now includes `postgres`, `redis`, `api`, `worker`, and `web`; worker command is `uv run celery -A app.core.celery_app.celery_app worker --loglevel=INFO`.
+- Dockerized API tests run with `docker compose run --rm api uv run pytest -q`.
+- Dockerized web tests run with `docker compose run --rm web bun run test` (web image uses Bun `1.2.23-alpine`).
 - Database schema is migration-controlled via Alembic (`apps/api/alembic`, `apps/api/alembic.ini`) with baseline revision `146703db33e7`.
 - API startup validates schema revision state via `app.db.migration_check.assert_schema_current_async` and no longer performs `create_all` / startup `ALTER TABLE` patching.
 - Seed script (`apps/api/scripts/seed_data.py`) requires Alembic migrations to be applied first and checks schema revision via `assert_schema_current_sync`.
