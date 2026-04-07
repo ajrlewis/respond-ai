@@ -14,7 +14,12 @@ logger = logging.getLogger(__name__)
 engine = create_engine(settings.database_url, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 async_engine = create_async_engine(settings.database_url, pool_pre_ping=True)
-AsyncSessionLocal = async_sessionmaker(bind=async_engine, autoflush=False, autocommit=False)
+AsyncSessionLocal = async_sessionmaker(
+    bind=async_engine,
+    autoflush=False,
+    autocommit=False,
+    expire_on_commit=False,
+)
 
 
 def get_sync_db() -> Generator[Session, None, None]:

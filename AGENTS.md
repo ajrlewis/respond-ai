@@ -27,6 +27,9 @@ infra/        # optional infrastructure/deployment files
 
 - Treat this file as the entrypoint and `.agents/*` as the source of truth.
 - Follow the workflows in `.agents/WORKFLOWS.md` for all changes.
+- Run Git preflight from `.agents/WORKFLOWS.md` before the first file edit in every task.
+- Do not start edits on `main`/`master`; switch to a feature branch first.
+- For empty/unborn repos, establish `main` first, then create a bootstrap feature branch before scaffolding.
 
 - Keep changes small and scoped to the task.
 - Add or update tests for any new or changed behavior.

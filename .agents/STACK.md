@@ -8,7 +8,10 @@
 - API framework: FastAPI
 - ORM / query layer: SQLAlchemy (async usage)
 - Testing: `pytest`
-- Agent framework options: LangGraph / LangChain
+- LLM framework: LangChain
+- LLM provider strategy: provider-agnostic adapters (OpenAI / Anthropic / Google)
+- Structured outputs: Pydantic schemas via LangChain structured output APIs
+- Model tiers: explicit `small`/`large` model declarations per task type
 - Database: PostgreSQL with `pgvector` (vector similarity search)
 - Migrations: Alembic
 
@@ -17,6 +20,7 @@
 - Default location: `apps/web`
 - Framework: Next.js (App Router)
 - Tooling/runtime: `bun`
+- Unit testing: Vitest + React Testing Library
 
 ## Infrastructure
 

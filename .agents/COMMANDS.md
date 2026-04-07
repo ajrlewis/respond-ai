@@ -4,8 +4,12 @@ Use these commands instead of guessing. If a command is missing or incorrect, up
 
 ## Branching
 
-- Create feature branch: `git checkout -b feat/<short-description>`
+- Verify git repo context: `git rev-parse --is-inside-work-tree`
+- Check if history exists (fails for empty/unborn repos): `git rev-parse --verify HEAD`
 - Show current branch: `git branch --show-current`
+- For empty/unborn repos, establish `main` first: `git checkout -B main`
+- Create feature branch: `git checkout -b feat/<short-description>`
+- Create bootstrap feature branch for initial scaffolding: `git checkout -b feat/bootstrap-<short-description>`
 - Commit staged changes: `git commit -m "<type>(<scope>): <summary>"`
 
 ## API (`apps/api`)
@@ -14,13 +18,10 @@ Use these commands instead of guessing. If a command is missing or incorrect, up
 >
 > FastAPI run command assumes ASGI entrypoint `app.main:app`. Replace with the real module path if different.
 
-- Install deps: `cd apps/api && uv sync --extra dev`
+- Install deps: `cd apps/api && uv sync --frozen`
 - Run API locally: `cd apps/api && uv run uvicorn app.main:app --reload`
-- Run Celery worker locally: `cd apps/api && uv run celery -A app.core.celery_app.celery_app worker --loglevel=INFO`
 - Run unit tests: `cd apps/api && uv run pytest -q`
 - Run full test suite: `cd apps/api && uv run pytest`
-- Seed markdown docs: `cd apps/api && uv run python scripts/seed_data.py`
-- Run offline evals: `cd apps/api && uv run python scripts/run_evals.py --limit 50`
 
 ## Database
 
@@ -28,19 +29,18 @@ Use these commands instead of guessing. If a command is missing or incorrect, up
 
 - Create migration: `cd apps/api && uv run alembic revision --autogenerate -m "<message>"`
 - Apply migrations: `cd apps/api && uv run alembic upgrade head`
-- Stamp existing schema as current head: `cd apps/api && uv run alembic stamp head`
 - Roll back one migration: `cd apps/api && uv run alembic downgrade -1`
 - Show current revision: `cd apps/api && uv run alembic current`
-- Docker apply migrations: `docker compose exec -T api uv run alembic upgrade head`
-- Docker create migration: `docker compose exec -T api uv run alembic revision --autogenerate -m "<message>"`
 
 ## Web (`apps/web`)
 
 > Default web path is `apps/web`. If this repo differs, update these commands and record the correct path in `.agents/MEMORY.md`.
+>
+> Unit tests for Next.js should use Vitest with React Testing Library.
 
 - Install deps: `cd apps/web && bun install --frozen-lockfile`
 - Run app locally: `cd apps/web && bun run dev`
-- Run tests: `cd apps/web && bun run test`
+- Run unit tests (Vitest): `cd apps/web && bun run test`
 - Run tests in watch mode: `cd apps/web && bun run test:watch`
 - Run tests with coverage: `cd apps/web && bun run test:coverage`
 - Build: `cd apps/web && bun run build`
@@ -49,9 +49,6 @@ Use these commands instead of guessing. If a command is missing or incorrect, up
 
 - Start full stack: `docker compose up --build`
 - Start in background: `docker compose up -d`
-- Start only Redis + API + worker: `docker compose up -d redis api worker`
-- Run API tests in container: `docker compose run --rm api uv run pytest -q`
-- Run web tests in container: `docker compose run --rm web bun run test`
 - Stop stack: `docker compose down`
 - View logs: `docker compose logs`
 
@@ -59,4 +56,4 @@ Use these commands instead of guessing. If a command is missing or incorrect, up
 
 > Prefer a single command that runs all required checks if available.
 
-- Local CI-equivalent checks: `cd apps/api && uv run pytest -q && cd ../web && bun run build`
+- Local CI-equivalent checks: `<replace-with-your-local-ci-command>`
