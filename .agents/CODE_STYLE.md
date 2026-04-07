@@ -14,3 +14,12 @@
 
 - Follow existing project conventions and patterns before introducing new ones.
 - Prefer consistency with the surrounding code over personal preference.
+- In React/Next.js code, prefer focused components and custom hooks over large mixed-responsibility files when it improves clarity and testability.
+- In backend LLM code, keep concerns separated (`nodes`, `prompts`, `ai`, `core`) instead of mixing prompts, provider calls, and domain logic in one file.
+- Prefer explicit `small`/`large` model selection constants per task over ad-hoc model choices scattered across files.
+
+## File size guardrails
+
+- Soft limit: `300` lines per file. Consider splitting once a file crosses this size.
+- Hard limit: `500` lines per file. Split unless there is a strong documented reason.
+- Prohibited: `1000+` line files. Refactor into smaller modules before merging.

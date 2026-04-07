@@ -7,7 +7,10 @@ The goal is to verify that the change is complete, follows repo instructions, an
 ## Workflow eval
 
 - Did the work follow `.agents/WORKFLOWS.md`?
+- Was Git preflight completed before any file edit?
 - Was a feature branch created before the first code edit? If not, is the deviation explicitly acknowledged?
+- For non-empty repos, were edits avoided on `main`/`master`?
+- For empty/unborn repos, was `main` established before creating a bootstrap feature branch?
 - Was the change kept small and scoped to the task?
 - Were unrelated refactors avoided?
 - Were docs or agent instructions updated if behavior, commands, or workflows changed?
@@ -24,11 +27,15 @@ The goal is to verify that the change is complete, follows repo instructions, an
 - Is the implementation clear, typed, and maintainable?
 - Were comments and docstrings added where they help explain intent or non-obvious behavior?
 - Was unnecessary abstraction avoided?
+- For backend LLM work, are `nodes`, `prompts`, `ai`, and `core` concerns kept separated?
+- Do touched files stay within file-size guardrails (soft `300`, hard `500`, no `1000+` files)?
 
 ## Test eval
 
 - Were tests added or updated for new or changed behavior?
 - Were relevant tests run for impacted areas?
+- For web unit tests, does the setup use Vitest + React Testing Library?
+- Do web tests prioritize behavior-heavy components/hooks instead of requiring tests for every presentational component?
 - If tests were not run, is that stated explicitly in the final summary?
 - Were edge cases and failure paths considered?
 
@@ -37,6 +44,9 @@ The goal is to verify that the change is complete, follows repo instructions, an
 - If backend, frontend, or API behavior changed, were dependent code paths verified?
 - If shared interfaces changed, were affected consumers checked?
 - If runtime, dependency, build, or deployment behavior changed, were Docker/dev/prod implications reviewed?
+- For backend LLM integrations, are provider calls routed via LangChain with provider-agnostic adapters (OpenAI/Anthropic/Google)?
+- For structured outputs, are Pydantic schemas used and validated before dependent logic executes?
+- Is model selection explicit (`small` vs `large`) and aligned to task complexity?
 
 ## Database eval
 

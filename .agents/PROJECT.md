@@ -14,13 +14,26 @@ Repos may customize paths. If they do, update `.agents/COMMANDS.md` and `.agents
 - Python managed with `uv`
 - Tests with `pytest`
 - FastAPI API surface
-- Agentic/runtime libraries may use LangGraph/LangChain
+- LLM calls should go through LangChain abstractions, not provider SDKs directly in route handlers
+- Provider-agnostic LLM support (OpenAI / Anthropic / Google) via config-driven adapter selection
+- Structured output contracts should use Pydantic schemas
+- Model selection should use explicit task tiers (`small` for routing/classification/extraction, `large` for complex synthesis/reasoning)
 - PostgreSQL plus `pgvector` for embeddings/search
+
+## Backend module boundaries
+
+For maintainability, prefer separating concerns into focused modules:
+
+- `core/`: domain logic, business rules, and pure orchestration logic
+- `ai/`: model/provider wiring and shared LLM client setup
+- `prompts/`: prompt templates and prompt-building utilities
+- `nodes/`: discrete LLM or tool steps with one responsibility per node file
 
 ## Frontend expectations
 
 - Next.js App Router
 - `bun` for web dependency and script execution
+- Vitest + React Testing Library for web unit tests (components/hooks)
 
 ## Infra expectations
 
