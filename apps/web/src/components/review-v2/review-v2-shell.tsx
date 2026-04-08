@@ -5,6 +5,7 @@ import { extractQuestions } from "@/components/review-v2/review-v2-shell-utils";
 import {
   DocumentMetaPanel,
   GenerateCard,
+  ProcessingStatusStrip,
   StageCard,
   WorkspaceHeader,
 } from "@/components/review-v2/review-v2-workspace-sections";
@@ -41,7 +42,23 @@ type ReviewV2ShellProps = {
   onLogout?: () => void;
 };
 
-type InspectionPanel = "compare" | null;
+type InspectionPanel = "compare" | "activity" | null;
+type RunKind = "generation" | "revision";
+
+function runCopy(kind: RunKind): { title: string; subtitle: string } {
+  if (kind === "revision") {
+    return {
+      title: "Applying revision",
+      subtitle: "Updating draft content based on your requested changes.",
+    };
+  }
+
+  return {
+    title: "Generating draft",
+    subtitle: "Preparing a document-level response across all sections.",
+  };
+}
+
 export function ReviewV2Shell({
   currentUsername,
   isLoggingOut = false,
@@ -61,6 +78,9 @@ export function ReviewV2Shell({
   const [uploadHelperText, setUploadHelperText] = useState<string | null>(null);
   const [uploadErrorText, setUploadErrorText] = useState<string | null>(null);
   const [inspectionPanel, setInspectionPanel] = useState<InspectionPanel>(null);
+  const [activeRunKind, setActiveRunKind] = useState<RunKind | null>(null);
+  const [lastRunKind, setLastRunKind] = useState<RunKind | null>(null);
+  const [hasRunHistory, setHasRunHistory] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
   const [isAiComposerOpen, setIsAiComposerOpen] = useState(false);
   const [compareData, setCompareData] = useState<ResponseVersionComparison | null>(null);
@@ -70,6 +90,9 @@ export function ReviewV2Shell({
   const selectedVersion = document?.selected_version ?? null;
   const versions = document?.versions ?? [];
   const questions = document?.questions ?? [];
+  const isProcessing = isGenerating || isAskingAi;
+  const runKindForDisplay = activeRunKind ?? lastRunKind;
+  const runContent = runKindForDisplay ? runCopy(runKindForDisplay) : runCopy("generation");
 
   useEffect(() => {
     if (!document) return;
@@ -119,18 +142,24 @@ export function ReviewV2Shell({
         ? "editing"
         : "ready_to_generate";
   async function runProgress(labels: string[], action: () => Promise<void>) {
-    setStages(emptyStages(labels));
-    let index = 0;
+    const nextStages = emptyStages(labels);
+    if (nextStages.length) nextStages[0] = { ...nextStages[0], status: "running" };
+    setStages(nextStages);
+    if (!labels.length) {
+      await action();
+      return;
+    }
+
+    let activeIndex = 0;
     const interval = window.setInterval(() => {
+      activeIndex = (activeIndex + 1) % labels.length;
       setStages((previous) =>
-        previous.map((stage, stageIndex) => {
-          if (stageIndex < index) return { ...stage, status: "done" };
-          if (stageIndex === index) return { ...stage, status: "running" };
-          return { ...stage, status: "idle" };
-        }),
+        previous.map((stage, stageIndex) => ({
+          ...stage,
+          status: stageIndex === activeIndex ? "running" : "idle",
+        })),
       );
-      index = Math.min(index + 1, labels.length - 1);
-    }, 700);
+    }, 900);
     try {
       await action();
       setStages((previous) => previous.map((stage) => ({ ...stage, status: "done" })));
@@ -145,6 +174,11 @@ export function ReviewV2Shell({
     try {
       const nextDocument = await createSampleResponseDocument();
       setDocument(nextDocument);
+      setStages(emptyStages(GENERATION_STAGE_LABELS));
+      setActiveRunKind(null);
+      setLastRunKind(null);
+      setHasRunHistory(false);
+      setInspectionPanel(null);
       setUploadHelperText("Example questions loaded.");
       setUploadErrorText(null);
       setIsUploadModalOpen(false);
@@ -176,6 +210,11 @@ export function ReviewV2Shell({
         createdBy: currentUsername,
       });
       setDocument(nextDocument);
+      setStages(emptyStages(GENERATION_STAGE_LABELS));
+      setActiveRunKind(null);
+      setLastRunKind(null);
+      setHasRunHistory(false);
+      setInspectionPanel(null);
       setUploadHelperText(
         parsedQuestions.length
           ? `${parsedQuestions.length} question(s) loaded from ${file.name}.`
@@ -192,6 +231,9 @@ export function ReviewV2Shell({
   }
   async function handleGenerateDraft() {
     if (!document) return;
+    setActiveRunKind("generation");
+    setHasRunHistory(true);
+    setInspectionPanel("activity");
     setIsGenerating(true);
     setError(null);
     setNotice(null);
@@ -203,11 +245,13 @@ export function ReviewV2Shell({
         });
         setDocument(nextDocument);
       });
+      setLastRunKind("generation");
       setNotice("Draft generated. Edit directly or request a revision.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to generate document draft.");
     } finally {
       setIsGenerating(false);
+      setActiveRunKind(null);
     }
   }
   async function handleSwitchVersion(versionId: string) {
@@ -287,6 +331,12 @@ export function ReviewV2Shell({
     if (nextPanel !== "compare") return;
     await handleCompareVersions();
   }
+
+  function handleToggleActivityPanel() {
+    const nextPanel: InspectionPanel = inspectionPanel === "activity" ? null : "activity";
+    setInspectionPanel(nextPanel);
+  }
+
   async function handleAskAI() {
     if (!document || !selectedVersion) return;
     const trimmed = aiInstruction.trim();
@@ -294,6 +344,9 @@ export function ReviewV2Shell({
       setError("Describe changes before submitting.");
       return;
     }
+    setActiveRunKind("revision");
+    setHasRunHistory(true);
+    setInspectionPanel("activity");
     setIsAskingAi(true);
     setError(null);
     setNotice(null);
@@ -311,6 +364,7 @@ export function ReviewV2Shell({
         });
         setDocument(nextDocument);
       });
+      setLastRunKind("revision");
       setNotice("Revision submitted and saved as a new version.");
       setAiInstruction("");
       setIsAiComposerOpen(false);
@@ -318,6 +372,7 @@ export function ReviewV2Shell({
       setError(caught instanceof Error ? caught.message : "Failed to submit revision.");
     } finally {
       setIsAskingAi(false);
+      setActiveRunKind(null);
     }
   }
 
@@ -391,45 +446,59 @@ export function ReviewV2Shell({
           ) : null}
           {screenState === "generating" ? (
             <StageCard
-              title="Generating draft"
-              subtitle="Preparing a document-level response across all sections."
+              title={runContent.title}
               stages={stages}
             />
           ) : null}
           {screenState === "editing" && document && selectedVersion ? (
-            <ReviewV2EditingView
-              document={document}
-              editableSections={editableSections}
-              hasUnsavedChanges={hasUnsavedChanges}
-              hasGlobalEvidenceWarning={hasGlobalEvidenceWarning}
-              isAiComposerOpen={isAiComposerOpen}
-              aiInstruction={aiInstruction}
-              isAskingAi={isAskingAi}
-              isSavingVersion={isSavingVersion}
-              isApproving={isApproving}
-              loading={loading}
-              deletingVersionId={deletingVersionId}
-              notice={notice}
-              inspectionPanel={inspectionPanel}
-              compareData={compareData}
-              compareLeftVersionId={compareLeftVersionId}
-              compareRightVersionId={compareRightVersionId}
-              onSwitchVersion={handleSwitchVersion}
-              onDeleteVersion={handleDeleteVersion}
-              onToggleComposer={() => setIsAiComposerOpen((value) => !value)}
-              onInstructionChange={setAiInstruction}
-              onSubmitRevision={handleAskAI}
-              onCancelRevision={() => setIsAiComposerOpen(false)}
-              onSectionChange={(questionId, value) =>
-                setEditableSections((previous) => ({ ...previous, [questionId]: value }))
-              }
-              onSaveVersion={handleSaveVersion}
-              onApprove={handleApproveVersion}
-              onToggleCompare={handleToggleComparePanel}
-              onCompare={handleCompareVersions}
-              onCompareLeftChange={setCompareLeftVersionId}
-              onCompareRightChange={setCompareRightVersionId}
-            />
+            <>
+              {hasRunHistory ? (
+                <ProcessingStatusStrip
+                  title={runContent.title}
+                  stages={stages}
+                  isRunning={isProcessing}
+                />
+              ) : null}
+              <ReviewV2EditingView
+                document={document}
+                editableSections={editableSections}
+                hasUnsavedChanges={hasUnsavedChanges}
+                hasGlobalEvidenceWarning={hasGlobalEvidenceWarning}
+                isAiComposerOpen={isAiComposerOpen}
+                aiInstruction={aiInstruction}
+                isAskingAi={isAskingAi}
+                isSavingVersion={isSavingVersion}
+                isApproving={isApproving}
+                loading={loading}
+                isProcessing={isProcessing}
+                hasRunHistory={hasRunHistory}
+                runTitle={runContent.title}
+                runSubtitle={runContent.subtitle}
+                runStages={stages}
+                deletingVersionId={deletingVersionId}
+                notice={notice}
+                inspectionPanel={inspectionPanel}
+                compareData={compareData}
+                compareLeftVersionId={compareLeftVersionId}
+                compareRightVersionId={compareRightVersionId}
+                onSwitchVersion={handleSwitchVersion}
+                onDeleteVersion={handleDeleteVersion}
+                onToggleComposer={() => setIsAiComposerOpen((value) => !value)}
+                onInstructionChange={setAiInstruction}
+                onSubmitRevision={handleAskAI}
+                onCancelRevision={() => setIsAiComposerOpen(false)}
+                onSectionChange={(questionId, value) =>
+                  setEditableSections((previous) => ({ ...previous, [questionId]: value }))
+                }
+                onSaveVersion={handleSaveVersion}
+                onApprove={handleApproveVersion}
+                onToggleActivity={handleToggleActivityPanel}
+                onToggleCompare={handleToggleComparePanel}
+                onCompare={handleCompareVersions}
+                onCompareLeftChange={setCompareLeftVersionId}
+                onCompareRightChange={setCompareRightVersionId}
+              />
+            </>
           ) : null}
         </>
       ) : null}

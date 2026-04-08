@@ -15,6 +15,20 @@ type Stage = {
   status: "idle" | "running" | "done";
 };
 
+function stageStatusLabel(status: Stage["status"]): string {
+  if (status === "running") return "Running";
+  if (status === "done") return "Done";
+  return "Pending";
+}
+
+function activeStageLabel(stages: Stage[]): string {
+  const running = stages.find((stage) => stage.status === "running");
+  if (running) return running.label;
+  const pending = stages.find((stage) => stage.status === "idle");
+  if (pending) return pending.label;
+  return "Processing complete";
+}
+
 function toRelevanceLabel(score: number | null | undefined): string {
   if (typeof score !== "number" || Number.isNaN(score)) return "Medium relevance";
   if (score >= 0.75) return "High relevance";
@@ -142,23 +156,53 @@ export function GenerateCard({ generating, loading, onGenerate }: GenerateCardPr
 
 type StageCardProps = {
   title: string;
-  subtitle: string;
   stages: Stage[];
 };
 
-export function StageCard({ title, subtitle, stages }: StageCardProps) {
+export function StageCard({ title, stages }: StageCardProps) {
+  const currentStage = activeStageLabel(stages);
+  const isComplete = stages.length > 0 && stages.every((stage) => stage.status === "done");
   return (
     <section className={styles.centerCard}>
-      <h3>{title}</h3>
-      <p>{subtitle}</p>
-      <div className={styles.stageList}>
-        {stages.map((stage) => (
-          <p key={stage.label} className={`${styles.stageRow} ${styles[`stage_${stage.status}`]}`}>
-            <span className={styles.stageDot} />
-            {stage.label}
-          </p>
-        ))}
+      <div className={styles.processingHeader}>
+        <span className={styles.runSpinner} aria-hidden="true" />
+        <h3>{title}</h3>
       </div>
+      <div className={styles.stageTicker} aria-live="polite">
+        <p
+          key={`${currentStage}-${isComplete ? "done" : "running"}`}
+          className={`${styles.stageTickerText} ${isComplete ? styles.stageTickerTextDone : styles.stageTickerTextRunning}`}
+          data-stage={currentStage}
+        >
+          {currentStage}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+type ProcessingStatusStripProps = {
+  title: string;
+  stages: Stage[];
+  isRunning: boolean;
+};
+
+export function ProcessingStatusStrip({ title, stages, isRunning }: ProcessingStatusStripProps) {
+  return (
+    <section className={styles.processingStrip} aria-live="polite">
+      <div className={styles.processingStripLead}>
+        <span
+          className={isRunning ? styles.runSpinner : styles.processingDoneDot}
+          aria-hidden="true"
+        />
+        <div>
+          <p className={styles.processingStripTitle}>{title}</p>
+          <p className={styles.processingStripMeta}>
+            {isRunning ? activeStageLabel(stages) : "Processing complete"}
+          </p>
+        </div>
+      </div>
+      <p className={styles.processingStripState}>{isRunning ? "In progress" : "Completed"}</p>
     </section>
   );
 }
@@ -195,7 +239,7 @@ export function AIComposer({
       />
       <div className={styles.aiActions}>
         <button type="button" onClick={onApply} disabled={askingAi || loading}>
-          {askingAi ? "Submitting..." : "Submit"}
+          {askingAi ? "Applying..." : "Submit"}
         </button>
         <button type="button" className={styles.secondaryButton} onClick={onCancel}>
           Cancel
@@ -396,6 +440,51 @@ export function ComparePanel({
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+type ActivityPanelProps = {
+  title: string;
+  subtitle: string;
+  stages: Stage[];
+  isRunning: boolean;
+  hasRunHistory: boolean;
+};
+
+export function ActivityPanel({
+  title,
+  subtitle,
+  stages,
+  isRunning,
+  hasRunHistory,
+}: ActivityPanelProps) {
+  return (
+    <section className={styles.sidePanel}>
+      <h3>Activity</h3>
+      <p className={styles.questionMeta}>
+        {hasRunHistory ? subtitle : "Run generation or submit a revision to view processing activity."}
+      </p>
+      {hasRunHistory ? (
+        <>
+          <div className={styles.processingStripLead}>
+            <span
+              className={isRunning ? styles.runSpinner : styles.processingDoneDot}
+              aria-hidden="true"
+            />
+            <p className={styles.processingStripTitle}>{title}</p>
+          </div>
+          <div className={styles.stageList}>
+            {stages.map((stage) => (
+              <p key={`activity-${stage.label}`} className={`${styles.stageRow} ${styles[`stage_${stage.status}`]}`}>
+                <span className={styles.stageDot} />
+                <span>{stage.label}</span>
+                <span className={styles.stageStateLabel}>{stageStatusLabel(stage.status)}</span>
+              </p>
+            ))}
+          </div>
+        </>
+      ) : null}
     </section>
   );
 }

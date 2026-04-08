@@ -210,6 +210,21 @@
   justify-self: start;
   width: auto;
 }
+.processingHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-12);
+}
+.runSpinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid #bfd0e4;
+  border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
 .versionRow {
   max-width: 1360px;
   margin: var(--space-16) auto 0;
@@ -494,6 +509,49 @@
   display: grid;
   gap: var(--space-8);
 }
+.stageTicker {
+  margin-top: var(--space-8);
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+.stageTickerText {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.4;
+  position: relative;
+  display: inline-block;
+}
+.stageTickerTextRunning {
+  color: rgba(47, 79, 104, 0.16);
+  font-weight: 600;
+}
+.stageTickerTextRunning::after {
+  content: attr(data-stage);
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    rgba(47, 79, 104, 0.2) 0%,
+    rgba(47, 79, 104, 0.95) 40%,
+    #1f3c56 100%
+  );
+  background-size: 200% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  white-space: nowrap;
+  overflow: hidden;
+  width: 0;
+  animation: stageTickerReveal 1.5s ease-out forwards;
+}
+.stageTickerTextDone {
+  color: #5f7388;
+  font-weight: 470;
+}
 .stageRow {
   margin: 0; border: 1px solid var(--stroke); border-radius: var(--radius-sm); background: #f8fafd;
   padding: 8px 10px; display: flex; align-items: center; gap: var(--space-8); font-size: 0.82rem;
@@ -501,18 +559,94 @@
 .stageDot {
   width: 8px; height: 8px; border-radius: 999px; background: #a7b8ca;
 }
+.stageStateLabel {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 .stage_idle .stageDot { background: #a7b8ca; }
 .stage_running .stageDot { background: #2a8b96; }
 .stage_done .stageDot { background: #2d8669; }
+.processingStrip {
+  max-width: 1360px;
+  margin: var(--space-12) auto 0;
+  border: 1px solid #d8e2ee;
+  border-radius: var(--radius-md);
+  background: #f8fbff;
+  padding: var(--space-12) var(--space-16);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+.processingStripLead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+.processingDoneDot {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid #a4cdbd;
+  background: #edf8f2;
+  flex: 0 0 auto;
+}
+.processingStripTitle {
+  margin: 0;
+  color: #1c3952;
+  font-size: 0.84rem;
+  font-weight: 640;
+}
+.processingStripMeta {
+  margin: 2px 0 0;
+  color: #4f687f;
+  font-size: 0.8rem;
+}
+.processingStripState {
+  margin: 0;
+  color: #3f5f7a;
+  font-size: 0.76rem;
+  font-weight: 620;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
 .errorBanner {
   max-width: 1360px; margin: var(--space-12) auto 0; border-radius: var(--radius-sm);
   padding: 10px 12px; font-size: 0.84rem; border: 1px solid #e3beb8; background: #fff2ef; color: #b4493f;
+}
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes stageTickerReveal {
+  0% {
+    width: 0;
+    opacity: 0.45;
+    background-position: 100% 0;
+  }
+  60% {
+    width: 100%;
+    opacity: 1;
+    background-position: 28% 0;
+  }
+  100% {
+    width: 100%;
+    opacity: 1;
+    background-position: 0 0;
+  }
 }
 @media (max-width: 920px) {
   .page {
     padding: var(--space-16);
   }
-  .header, .documentHeader, .revisionToggleRow, .reviewActions, .compareHeader { flex-direction: column; align-items: flex-start; }
+  .header, .documentHeader, .revisionToggleRow, .reviewActions, .compareHeader, .processingStrip { flex-direction: column; align-items: flex-start; }
   .actionRow,
   .secondaryActions,
   .compareSelectors,

@@ -3,8 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  ActivityPanel,
   DocumentMetaPanel,
   EditorSurface,
+  ProcessingStatusStrip,
   VersionRow,
 } from "@/components/review-v2/review-v2-workspace-sections";
 import type { ResponseDocument } from "@/lib/api";
@@ -173,5 +175,49 @@ describe("EditorSurface", () => {
     expect(screen.getByText(/\[1\]/)).toBeInTheDocument();
     expect(screen.getByText(/High relevance/)).toBeInTheDocument();
     expect(screen.getByText(/Prior RFP Answers/)).toBeInTheDocument();
+  });
+});
+
+describe("ProcessingStatusStrip", () => {
+  it("shows active stage while processing", () => {
+    render(
+      <ProcessingStatusStrip
+        title="Applying revision"
+        isRunning
+        stages={[
+          { label: "Analyze revision request", status: "done" },
+          { label: "Revise draft text", status: "running" },
+          { label: "Prepare editable suggestions", status: "idle" },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Applying revision")).toBeInTheDocument();
+    expect(screen.getByText("Revise draft text")).toBeInTheDocument();
+    expect(screen.getByText("In progress")).toBeInTheDocument();
+  });
+});
+
+describe("ActivityPanel", () => {
+  it("renders stage timeline for the latest processing run", () => {
+    render(
+      <ActivityPanel
+        title="Generating draft"
+        subtitle="Preparing a document-level response across all sections."
+        isRunning={false}
+        hasRunHistory
+        stages={[
+          { label: "Retrieve supporting material", status: "done" },
+          { label: "Rank evidence", status: "done" },
+          { label: "Draft response sections", status: "done" },
+          { label: "Review citations", status: "done" },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Activity")).toBeInTheDocument();
+    expect(screen.getByText("Generating draft")).toBeInTheDocument();
+    expect(screen.getByText("Retrieve supporting material")).toBeInTheDocument();
+    expect(screen.getAllByText("Done").length).toBeGreaterThan(0);
   });
 });

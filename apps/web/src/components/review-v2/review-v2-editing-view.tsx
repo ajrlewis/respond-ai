@@ -1,5 +1,6 @@
 import { type ResponseDocument, type ResponseSection, type ResponseVersionComparison } from "@/lib/api";
 import {
+  ActivityPanel,
   AIComposer,
   ComparePanel,
   EditorSurface,
@@ -7,7 +8,7 @@ import {
 } from "@/components/review-v2/review-v2-workspace-sections";
 import styles from "./review-v2-shell.module.css";
 
-type InspectionPanel = "compare" | null;
+type InspectionPanel = "compare" | "activity" | null;
 
 type ReviewV2EditingViewProps = {
   document: ResponseDocument;
@@ -20,6 +21,11 @@ type ReviewV2EditingViewProps = {
   isSavingVersion: boolean;
   isApproving: boolean;
   loading: boolean;
+  isProcessing: boolean;
+  hasRunHistory: boolean;
+  runTitle: string;
+  runSubtitle: string;
+  runStages: { label: string; status: "idle" | "running" | "done" }[];
   deletingVersionId: string | null;
   notice: string | null;
   inspectionPanel: InspectionPanel;
@@ -35,6 +41,7 @@ type ReviewV2EditingViewProps = {
   onSectionChange: (questionId: string, value: string) => void;
   onSaveVersion: () => void;
   onApprove: () => void;
+  onToggleActivity: () => void;
   onToggleCompare: () => void;
   onCompare: () => void;
   onCompareLeftChange: (value: string) => void;
@@ -52,6 +59,11 @@ export function ReviewV2EditingView({
   isSavingVersion,
   isApproving,
   loading,
+  isProcessing,
+  hasRunHistory,
+  runTitle,
+  runSubtitle,
+  runStages,
   deletingVersionId,
   notice,
   inspectionPanel,
@@ -67,6 +79,7 @@ export function ReviewV2EditingView({
   onSectionChange,
   onSaveVersion,
   onApprove,
+  onToggleActivity,
   onToggleCompare,
   onCompare,
   onCompareLeftChange,
@@ -83,7 +96,7 @@ export function ReviewV2EditingView({
       <VersionRow
         versions={document.versions}
         selectedVersionId={selectedVersion.id}
-        loading={loading || !!deletingVersionId}
+        loading={loading || !!deletingVersionId || isProcessing}
         onSelect={onSwitchVersion}
         onDelete={onDeleteVersion}
       />
@@ -133,7 +146,7 @@ export function ReviewV2EditingView({
             type="button"
             className={styles.secondaryButton}
             onClick={onSaveVersion}
-            disabled={!hasUnsavedChanges || isSavingVersion || loading || isApproving}
+            disabled={!hasUnsavedChanges || isSavingVersion || isProcessing || loading || isApproving}
           >
             {isSavingVersion ? "Saving..." : "Save draft"}
           </button>
@@ -146,6 +159,14 @@ export function ReviewV2EditingView({
       <section className={styles.secondaryActions}>
         <button
           type="button"
+          className={inspectionPanel === "activity" ? styles.secondaryButton : styles.ghostButton}
+          onClick={onToggleActivity}
+          disabled={!hasRunHistory}
+        >
+          {inspectionPanel === "activity" ? "Hide activity" : "View activity"}
+        </button>
+        <button
+          type="button"
           className={inspectionPanel === "compare" ? styles.secondaryButton : styles.ghostButton}
           onClick={onToggleCompare}
           disabled={loading}
@@ -153,6 +174,15 @@ export function ReviewV2EditingView({
           Compare versions
         </button>
       </section>
+      {inspectionPanel === "activity" ? (
+        <ActivityPanel
+          title={runTitle}
+          subtitle={runSubtitle}
+          stages={runStages}
+          isRunning={isProcessing}
+          hasRunHistory={hasRunHistory}
+        />
+      ) : null}
       {inspectionPanel === "compare" && compareData ? (
         <ComparePanel
           compareData={compareData}
