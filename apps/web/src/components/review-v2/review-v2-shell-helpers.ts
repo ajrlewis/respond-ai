@@ -1,4 +1,4 @@
-import { type ResponseDocument } from "@/lib/api";
+import { type EvidenceItem, type ResponseDocument } from "@/lib/api";
 
 export type Stage = {
   label: string;
@@ -57,4 +57,63 @@ export function hasGlobalInsufficientEvidenceWarning(document: ResponseDocument)
   return sections.every(
     (section) => section.content_markdown.trim() === INSUFFICIENT_EVIDENCE_WARNING,
   );
+}
+
+const INLINE_CITATION_PATTERN = /\[(\d+)\]/g;
+
+export type SyncedSectionContent = {
+  contentMarkdown: string;
+  evidenceRefs: EvidenceItem[];
+};
+
+function extractOrderedCitationNumbers(contentMarkdown: string): number[] {
+  const ordered: number[] = [];
+  const seen = new Set<number>();
+  for (const match of contentMarkdown.matchAll(INLINE_CITATION_PATTERN)) {
+    const parsed = Number.parseInt(match[1] ?? "", 10);
+    if (!Number.isFinite(parsed) || parsed <= 0 || seen.has(parsed)) continue;
+    ordered.push(parsed);
+    seen.add(parsed);
+  }
+  return ordered;
+}
+
+export function syncSectionContentAndEvidence(
+  contentMarkdown: string,
+  evidenceRefs: EvidenceItem[],
+): SyncedSectionContent {
+  if (!contentMarkdown.trim() || !evidenceRefs.length) {
+    return {
+      contentMarkdown,
+      evidenceRefs: [],
+    };
+  }
+
+  const orderedCitations = extractOrderedCitationNumbers(contentMarkdown).filter(
+    (citationNumber) => citationNumber >= 1 && citationNumber <= evidenceRefs.length,
+  );
+  if (!orderedCitations.length) {
+    return {
+      contentMarkdown,
+      evidenceRefs: [],
+    };
+  }
+
+  const renumberMap = new Map<number, number>();
+  orderedCitations.forEach((sourceCitation, index) => {
+    renumberMap.set(sourceCitation, index + 1);
+  });
+  const normalizedContent = contentMarkdown.replace(INLINE_CITATION_PATTERN, (fullMatch, raw) => {
+    const current = Number.parseInt(raw, 10);
+    const mapped = renumberMap.get(current);
+    if (!mapped) return fullMatch;
+    return `[${mapped}]`;
+  });
+
+  return {
+    contentMarkdown: normalizedContent,
+    evidenceRefs: orderedCitations
+      .map((citationNumber) => evidenceRefs[citationNumber - 1])
+      .filter((item): item is EvidenceItem => !!item),
+  };
 }

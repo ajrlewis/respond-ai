@@ -15,6 +15,7 @@ import {
   INSUFFICIENT_EVIDENCE_WARNING,
   emptyStages,
   hasGlobalInsufficientEvidenceWarning,
+  syncSectionContentAndEvidence,
   toQuestionContentMap,
   type Stage,
 } from "@/components/review-v2/review-v2-shell-helpers";
@@ -40,7 +41,7 @@ type ReviewV2ShellProps = {
   onLogout?: () => void;
 };
 
-type InspectionPanel = "sources" | "compare" | null;
+type InspectionPanel = "compare" | null;
 export function ReviewV2Shell({
   currentUsername,
   isLoggingOut = false,
@@ -240,10 +241,11 @@ export function ReviewV2Shell({
       const sections = questions.map((question) => {
         const existing = selectedVersion.sections.find((section) => section.question_id === question.id);
         const currentValue = (editableSections[question.id] ?? "").trim();
+        const synced = syncSectionContentAndEvidence(currentValue, existing?.evidence_refs ?? []);
         return {
           question_id: question.id,
-          content_markdown: currentValue,
-          evidence_refs: existing?.evidence_refs ?? [],
+          content_markdown: synced.contentMarkdown,
+          evidence_refs: synced.evidenceRefs,
           confidence_score: existing?.confidence_score ?? null,
           coverage_score: existing?.coverage_score ?? null,
         };
@@ -277,10 +279,6 @@ export function ReviewV2Shell({
     } finally {
       setLoading(false);
     }
-  }
-
-  function handleToggleSourcesPanel() {
-    setInspectionPanel((previous) => (previous === "sources" ? null : "sources"));
   }
 
   async function handleToggleComparePanel() {
@@ -427,7 +425,6 @@ export function ReviewV2Shell({
               }
               onSaveVersion={handleSaveVersion}
               onApprove={handleApproveVersion}
-              onToggleSources={handleToggleSourcesPanel}
               onToggleCompare={handleToggleComparePanel}
               onCompare={handleCompareVersions}
               onCompareLeftChange={setCompareLeftVersionId}

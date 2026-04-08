@@ -22,12 +22,6 @@ function toRelevanceLabel(score: number | null | undefined): string {
   return "Low relevance";
 }
 
-function compactExcerpt(text: string, maxChars = 180): string {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxChars) return normalized;
-  return `${normalized.slice(0, maxChars - 1).trimEnd()}...`;
-}
-
 function sourceDisplayName(item: EvidenceItem): string {
   return item.document_title || item.document_filename || "Source";
 }
@@ -268,14 +262,14 @@ export function EditorSurface({
                       key={`${question.id}-${item.chunk_id}-${item.chunk_index}`}
                       className={styles.sourceRow}
                     >
-                      <p className={styles.sourceMeta}>
-                        <span className={styles.sourceIndex}>[{sourceIndex + 1}]</span>{" "}
-                        <span>{toRelevanceLabel(item.score)}</span>
-                        {typeof item.score === "number" ? <span className={styles.sourceScore}> · {item.score.toFixed(2)}</span> : null}
-                        <span className={styles.sourceSeparator}> · </span>
-                        <span className={styles.sourceTitle}>{sourceDisplayName(item)}</span>
-                      </p>
-                      <p className={styles.sourceExcerpt}>{compactExcerpt(item.text)}</p>
+                  <p className={styles.sourceMeta}>
+                    <span className={styles.sourceIndex}>[{sourceIndex + 1}]</span>{" "}
+                    <span>{toRelevanceLabel(item.score)}</span>
+                    {typeof item.score === "number" ? <span className={styles.sourceScore}> · {item.score.toFixed(2)}</span> : null}
+                    <span className={styles.sourceSeparator}> · </span>
+                    <span className={styles.sourceTitle}>{sourceDisplayName(item)}</span>
+                  </p>
+                      <p className={styles.sourceExcerpt}>{item.text}</p>
                     </article>
                   ))}
                 </div>
@@ -397,45 +391,6 @@ export function ComparePanel({
           </div>
         ))}
       </div>
-    </section>
-  );
-}
-
-type AllSourcesPanelProps = {
-  questions: ResponseDocument["questions"];
-  sections: ResponseSection[];
-};
-
-export function AllSourcesPanel({ questions, sections }: AllSourcesPanelProps) {
-  const questionTextById = new Map(questions.map((question) => [question.id, question.extracted_text]));
-
-  return (
-    <section className={styles.sidePanel}>
-      <h3>All sources</h3>
-      <p className={styles.questionMeta}>Detailed source review across all question responses.</p>
-      {sections.map((section, questionIndex) => {
-        const questionText = questionTextById.get(section.question_id) ?? "Question";
-        return (
-          <article key={section.id} className={styles.sourceGroup}>
-            <p className={styles.sourceGroupHeading}>
-              {questionIndex + 1}. {questionText}
-            </p>
-            {!section.evidence_refs.length ? <p className={styles.questionMeta}>No sources attached.</p> : null}
-            {section.evidence_refs.map((item, sourceIndex) => (
-              <article key={`${section.id}-${item.chunk_id}-${item.chunk_index}`} className={styles.evidenceCard}>
-                <p className={styles.evidenceCitationTag}>[{sourceIndex + 1}]</p>
-                <p className={styles.sourceMeta}>
-                  <span>{toRelevanceLabel(item.score)}</span>
-                  {typeof item.score === "number" ? <span className={styles.sourceScore}> · {item.score.toFixed(2)}</span> : null}
-                  <span className={styles.sourceSeparator}> · </span>
-                  <span className={styles.sourceTitle}>{sourceDisplayName(item)}</span>
-                </p>
-                <p className={styles.evidenceExcerpt}>{item.text}</p>
-              </article>
-            ))}
-          </article>
-        );
-      })}
     </section>
   );
 }

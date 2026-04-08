@@ -1,6 +1,5 @@
 import { type ResponseDocument, type ResponseSection, type ResponseVersionComparison } from "@/lib/api";
 import {
-  AllSourcesPanel,
   AIComposer,
   ComparePanel,
   EditorSurface,
@@ -8,7 +7,7 @@ import {
 } from "@/components/review-v2/review-v2-workspace-sections";
 import styles from "./review-v2-shell.module.css";
 
-type InspectionPanel = "sources" | "compare" | null;
+type InspectionPanel = "compare" | null;
 
 type ReviewV2EditingViewProps = {
   document: ResponseDocument;
@@ -36,7 +35,6 @@ type ReviewV2EditingViewProps = {
   onSectionChange: (questionId: string, value: string) => void;
   onSaveVersion: () => void;
   onApprove: () => void;
-  onToggleSources: () => void;
   onToggleCompare: () => void;
   onCompare: () => void;
   onCompareLeftChange: (value: string) => void;
@@ -69,7 +67,6 @@ export function ReviewV2EditingView({
   onSectionChange,
   onSaveVersion,
   onApprove,
-  onToggleSources,
   onToggleCompare,
   onCompare,
   onCompareLeftChange,
@@ -149,13 +146,6 @@ export function ReviewV2EditingView({
       <section className={styles.secondaryActions}>
         <button
           type="button"
-          className={inspectionPanel === "sources" ? styles.secondaryButton : styles.ghostButton}
-          onClick={onToggleSources}
-        >
-          Show all sources
-        </button>
-        <button
-          type="button"
           className={inspectionPanel === "compare" ? styles.secondaryButton : styles.ghostButton}
           onClick={onToggleCompare}
           disabled={loading}
@@ -163,9 +153,6 @@ export function ReviewV2EditingView({
           Compare versions
         </button>
       </section>
-      {inspectionPanel === "sources" ? (
-        <AllSourcesPanel questions={document.questions} sections={selectedVersion.sections} />
-      ) : null}
       {inspectionPanel === "compare" && compareData ? (
         <ComparePanel
           compareData={compareData}
