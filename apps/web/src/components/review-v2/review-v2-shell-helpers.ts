@@ -39,6 +39,7 @@ export function markAllStagesDone(stages: Stage[]): Stage[] {
 }
 
 export const GENERATION_STAGE_LABELS = [
+  "Plan approach",
   "Retrieve supporting material",
   "Rank evidence",
   "Draft response sections",

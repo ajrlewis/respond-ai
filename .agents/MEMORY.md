@@ -45,6 +45,9 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - Web app proxies `/api/*` and `/auth/*` via Next.js rewrites; configure `API_BASE_URL` for the upstream API target (Docker Compose defaults to `http://api:8000` for web build/runtime).
 - Response-document workflow updates stream over SSE at `/api/response-documents/{document_id}/events`; `review-v2` generation/revision stages now consume these server events (run-id scoped) instead of UI-only stage timers.
 - Web SSE clients can use `NEXT_PUBLIC_API_SSE_BASE_URL` (fallback: `NEXT_PUBLIC_API_BASE_URL`; localhost browser fallback: `http://localhost:8000`) so EventSource traffic bypasses Next.js rewrite buffering.
+- Response-document generate/revise now run through the existing LangGraph runtime per question and forward node-start progress into document SSE stage updates.
+- Response-document generation/revision must read post-run `RFPSession` snapshots using a fresh `AsyncSessionLocal` to avoid stale request-scoped identity-map state when LangGraph updates sessions concurrently.
+- Generation SSE `stage_update` events now include `question_completed`, `question_id`, `content_markdown`, and `evidence_refs` metadata so the review-v2 generating view can populate each answer field and supporting sources immediately after each question completes.
 
 ## Example update
 

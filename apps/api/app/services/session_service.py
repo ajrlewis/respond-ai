@@ -28,10 +28,20 @@ class SessionService:
 
     async def get_session_by_thread_id(self, thread_id: str) -> RFPSession | None:
         logger.debug("Fetching session by thread_id=%s", thread_id)
-        stmt = select(RFPSession).where(RFPSession.graph_thread_id == thread_id)
+        # Force refresh from the database so callers don't reuse a stale identity-map
+        # instance after another async workflow run updates the same session row.
+        stmt = (
+            select(RFPSession)
+            .where(RFPSession.graph_thread_id == thread_id)
+            .execution_options(populate_existing=True)
+        )
         session = (await self.db.execute(stmt)).scalar_one_or_none()
         if not session:
             logger.debug("Session not found for thread_id=%s", thread_id)
+            return None
+        # Even with populate_existing, AsyncSession may still return an identity-mapped
+        # instance with stale column values after another session commits updates.
+        await self.db.refresh(session)
         return session
 
     async def create_or_get_session(self, *, thread_id: str, question_text: str, tone: str) -> RFPSession:

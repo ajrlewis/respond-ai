@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 import uuid
 from uuid import UUID
 
@@ -140,20 +141,33 @@ async def generate_response_document(
 
     service = ResponseDocumentService(db)
     run_id = (payload.run_id or "").strip() or str(uuid.uuid4())
+    emitted_stages: set[str] = set()
 
-    async def publish_stage(stage_id: str, stage_label: str, stage_status: str) -> None:
+    async def publish_stage(
+        stage_id: str,
+        stage_label: str,
+        stage_status: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        if stage_status == "running":
+            if stage_id in emitted_stages:
+                return
+            emitted_stages.add(stage_id)
+        metadata: dict[str, Any] = {
+            "run_id": run_id,
+            "operation": "generation",
+            "stage_id": stage_id,
+            "stage_label": stage_label,
+            "stage_status": stage_status,
+        }
+        if details:
+            metadata.update(details)
         await workflow_event_bus.publish_document(
             document_id=str(document_id),
             reason="stage_update",
             node_name=stage_id,
             status=stage_status,
-            metadata={
-                "run_id": run_id,
-                "operation": "generation",
-                "stage_id": stage_id,
-                "stage_label": stage_label,
-                "stage_status": stage_status,
-            },
+            metadata=metadata,
         )
 
     await workflow_event_bus.publish_document(
@@ -289,20 +303,33 @@ async def ai_revise_response_document(
 
     service = ResponseDocumentService(db)
     run_id = (payload.run_id or "").strip() or str(uuid.uuid4())
+    emitted_stages: set[str] = set()
 
-    async def publish_stage(stage_id: str, stage_label: str, stage_status: str) -> None:
+    async def publish_stage(
+        stage_id: str,
+        stage_label: str,
+        stage_status: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        if stage_status == "running":
+            if stage_id in emitted_stages:
+                return
+            emitted_stages.add(stage_id)
+        metadata: dict[str, Any] = {
+            "run_id": run_id,
+            "operation": "revision",
+            "stage_id": stage_id,
+            "stage_label": stage_label,
+            "stage_status": stage_status,
+        }
+        if details:
+            metadata.update(details)
         await workflow_event_bus.publish_document(
             document_id=str(document_id),
             reason="stage_update",
             node_name=stage_id,
             status=stage_status,
-            metadata={
-                "run_id": run_id,
-                "operation": "revision",
-                "stage_id": stage_id,
-                "stage_label": stage_label,
-                "stage_status": stage_status,
-            },
+            metadata=metadata,
         )
 
     await workflow_event_bus.publish_document(

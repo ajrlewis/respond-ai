@@ -2,21 +2,27 @@
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
+import uuid
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.database import AsyncSessionLocal
 from app.db.models import (
+    RFPSession,
     ResponseDocument,
     ResponseDocumentSection,
     ResponseDocumentVersion,
     ResponseQuestion,
 )
+from app.graph.runtime import resume_from_review, run_until_human_review
 from app.schemas.documents import EvidenceChunk
 from app.schemas.response_documents import (
     AIReviseRequest,
@@ -31,8 +37,7 @@ from app.schemas.response_documents import (
     SaveResponseVersionRequest,
     SaveSectionInput,
 )
-from app.services.drafting import draft_answer, revise_answer
-from app.services.evidence_analysis import optional_embedding_service
+from app.services.evidence_analysis import active_evidence, optional_embedding_service
 from app.services.response_document_utils import (
     EXAMPLE_QUESTIONS,
     build_diff_segments,
@@ -42,7 +47,9 @@ from app.services.response_document_utils import (
     normalize_title,
     section_text_map,
 )
-from app.services.retrieval import RetrievalService, chunk_to_dict
+from app.services.retrieval import RetrievalService
+from app.services.session_service import SessionService
+from app.services.workflow_events import workflow_event_bus
 
 
 @dataclass(slots=True)
@@ -52,7 +59,22 @@ class _HydratedDocument:
     versions: list[ResponseDocumentVersion]
 
 
-DocumentProgressCallback = Callable[[str, str, str], Awaitable[None]]
+DocumentProgressCallback = Callable[[str, str, str, dict[str, Any] | None], Awaitable[None]]
+AgentOperation = str
+
+GENERATION_NODE_STAGE_LABELS: dict[str, str] = {
+    "classify_and_plan": "Plan approach",
+    "adaptive_retrieve": "Retrieve supporting material",
+    "evaluate_evidence": "Rank evidence",
+    "draft_response": "Draft response sections",
+    "polish_response": "Review citations",
+}
+
+REVISION_NODE_STAGE_LABELS: dict[str, str] = {
+    "human_review": "Analyze revision request",
+    "revise_response": "Revise draft text",
+    "polish_response": "Prepare editable suggestions",
+}
 
 
 class ResponseDocumentService:
@@ -197,7 +219,7 @@ class ResponseDocumentService:
         created_by: str | None,
         progress: DocumentProgressCallback | None = None,
     ) -> ResponseDocumentOut:
-        """Generate answers for all questions and save as a new version."""
+        """Generate answers for all questions via LangGraph and save as a new version."""
 
         hydrated = await self._load_document(document_id)
         questions = hydrated.questions
@@ -218,52 +240,73 @@ class ResponseDocumentService:
         self.db.add(version)
         await self.db.flush()
 
-        if progress:
-            await progress("retrieve_supporting_material", "Retrieve supporting material", "running")
-        retrieved_by_question: dict[UUID, list] = {}
-        for question in questions:
-            retrieved_by_question[question.id] = await self.retrieval.hybrid_search(
-                question.extracted_text,
-                top_k=6,
+        session_service = SessionService(self.db)
+        total_questions = len(questions)
+        for question_index, question in enumerate(questions, start=1):
+            thread_id = str(uuid.uuid4())
+            session = await session_service.create_or_get_session(
+                thread_id=thread_id,
+                question_text=question.extracted_text,
+                tone=tone,
+            )
+            question.metadata_json = {
+                **(question.metadata_json or {}),
+                "agent_thread_id": thread_id,
+                "agent_session_id": str(session.id),
+            }
+
+            await self._run_with_session_progress(
+                session_id=str(session.id),
+                operation="generation",
+                progress=progress,
+                question_index=question_index,
+                question_total=total_questions,
+                runner=lambda: run_until_human_review(
+                    {
+                        "thread_id": thread_id,
+                        "question_text": question.extracted_text,
+                        "tone": tone,
+                        "session_id": str(session.id),
+                    },
+                    thread_id=thread_id,
+                ),
             )
 
-        if progress:
-            await progress("rank_evidence", "Rank evidence", "running")
-        evidence_by_question = {
-            question.id: [chunk_to_dict(item) for item in retrieved_by_question.get(question.id, [])]
-            for question in questions
-        }
-
-        if progress:
-            await progress("draft_response_sections", "Draft response sections", "running")
-        for question in questions:
-            evidence = evidence_by_question.get(question.id, [])
-            draft_text, _, confidence_payload, _ = await draft_answer(
-                question=question.extracted_text,
-                question_type="general",
-                tone=tone,
-                evidence=evidence,
-                existing_confidence="",
-                synthesis={},
-                retrieval_plan={},
-                evidence_evaluation={},
-                retrieval_strategy_used=None,
+            refreshed_session = await self._load_agent_session_snapshot(thread_id)
+            if not refreshed_session:
+                raise LookupError("Generated agent session was not found.")
+            section_payload = self._build_section_from_session(
+                question=question,
+                session=refreshed_session,
+                draft_version_id=version.id,
             )
             self.db.add(
                 ResponseDocumentSection(
                     draft_version_id=version.id,
                     question_id=question.id,
                     order_index=question.order_index,
-                    content_markdown=draft_text,
-                    evidence_refs_payload=evidence,
-                    confidence_score=confidence_payload.get("score"),
-                    coverage_score=coverage_to_score(confidence_payload.get("coverage")),
-                    metadata_json={},
+                    content_markdown=section_payload.content_markdown,
+                    evidence_refs_payload=section_payload.evidence_refs_payload,
+                    confidence_score=section_payload.confidence_score,
+                    coverage_score=section_payload.coverage_score,
+                    metadata_json=section_payload.metadata_json,
                 )
             )
-
-        if progress:
-            await progress("review_citations", "Review citations", "running")
+            await self.db.flush()
+            if progress is not None:
+                await progress(
+                    f"question_complete:q{question_index}",
+                    "Review citations",
+                    "done",
+                    {
+                        "question_index": question_index,
+                        "question_total": total_questions,
+                        "question_completed": True,
+                        "question_id": str(question.id),
+                        "content_markdown": section_payload.content_markdown,
+                        "evidence_refs": section_payload.evidence_refs_payload,
+                    },
+                )
 
         hydrated.document.status = "draft_ready"
         await self.db.commit()
@@ -330,7 +373,7 @@ class ResponseDocumentService:
                     evidence_refs_payload=[item.model_dump(mode="json") for item in evidence_refs],
                     confidence_score=confidence,
                     coverage_score=coverage,
-                    metadata_json={},
+                    metadata_json=dict(parent_section.metadata_json or {}) if parent_section else {},
                 )
             )
 
@@ -386,7 +429,7 @@ class ResponseDocumentService:
         *,
         progress: DocumentProgressCallback | None = None,
     ) -> AIReviseResponse:
-        """Return AI-revised section drafts without auto-saving a version."""
+        """Return AI-revised section drafts via LangGraph review-resume."""
 
         hydrated = await self._load_document(document_id)
         base = self._pick_version(hydrated.versions, payload.base_version_id)
@@ -397,22 +440,21 @@ class ResponseDocumentService:
         base_sections = {section.question_id: section for section in base.sections}
         target_question_ids = [payload.question_id] if payload.question_id else [item.id for item in hydrated.questions]
 
-        if progress:
-            await progress("analyze_revision_request", "Analyze revision request", "running")
-
+        session_service = SessionService(self.db)
         revised_sections: list[SaveSectionInput] = []
-        if progress:
-            await progress("revise_draft_text", "Revise draft text", "running")
-        for question_id in target_question_ids:
+        total_targets = len(target_question_ids)
+        for target_index, question_id in enumerate(target_question_ids, start=1):
             question = question_by_id.get(question_id)
             section = base_sections.get(question_id)
             if not question or not section:
                 continue
 
-            evidence_refs = [
-                EvidenceChunk.model_validate(item)
-                for item in (section.evidence_refs_payload or [])
-            ]
+            session = await self._ensure_agent_session_for_section(
+                question=question,
+                section=section,
+                tone=payload.tone,
+                session_service=session_service,
+            )
             feedback = payload.instruction.strip()
             if payload.selected_text and payload.selected_text.strip():
                 feedback = (
@@ -420,30 +462,208 @@ class ResponseDocumentService:
                     f"{payload.selected_text.strip()}"
                 )
 
-            revised_text, _, confidence_payload, _, _ = await revise_answer(
-                question=question.extracted_text,
-                question_type="general",
-                prior_draft=section.content_markdown,
-                evidence=[item.model_dump(mode="json") for item in evidence_refs],
-                reviewer_feedback=feedback,
-                tone=payload.tone,
-                retrieval_notes="",
+            await self._run_with_session_progress(
+                session_id=str(session.id),
+                operation="revision",
+                progress=progress,
+                question_index=target_index,
+                question_total=total_targets,
+                runner=lambda: resume_from_review(
+                    thread_id=session.graph_thread_id,
+                    review_payload={
+                        "session_id": str(session.id),
+                        "reviewer_action": "revise",
+                        "review_comments": feedback,
+                        "edited_answer": section.content_markdown,
+                        "reviewer_id": "",
+                        "excluded_evidence_keys": [],
+                        "reviewed_evidence_gaps": True,
+                        "evidence_gaps_acknowledged": True,
+                    },
+                ),
             )
 
+            refreshed = await self._load_agent_session_snapshot(session.graph_thread_id)
+            if not refreshed:
+                raise LookupError("Revised agent session was not found.")
+            evidence_refs = self._session_evidence_refs(refreshed)
+            confidence_payload = refreshed.confidence_payload or {}
             revised_sections.append(
                 SaveSectionInput(
                     question_id=question_id,
-                    content_markdown=revised_text,
+                    content_markdown=(refreshed.draft_answer or section.content_markdown or "").strip(),
                     evidence_refs=evidence_refs,
                     confidence_score=confidence_payload.get("score"),
                     coverage_score=coverage_to_score(confidence_payload.get("coverage")),
                 )
             )
 
-        if progress:
-            await progress("prepare_editable_suggestions", "Prepare editable suggestions", "running")
-
         return AIReviseResponse(base_version_id=base.id, revised_sections=revised_sections)
+
+    async def _run_with_session_progress(
+        self,
+        *,
+        session_id: str,
+        operation: AgentOperation,
+        progress: DocumentProgressCallback | None,
+        question_index: int | None = None,
+        question_total: int | None = None,
+        runner: Callable[[], Awaitable[dict]],
+    ) -> dict:
+        if progress is None:
+            return await runner()
+
+        ready = asyncio.Event()
+        stop = asyncio.Event()
+        startup_error: list[Exception] = []
+
+        async def consume() -> None:
+            try:
+                async with workflow_event_bus.subscribe_session(session_id) as subscription:
+                    ready.set()
+                    while not stop.is_set():
+                        signal = await subscription.next_event(timeout=0.4)
+                        if signal is None or signal.reason != "node_started":
+                            continue
+                        label = self._stage_label_for_node(signal.node_name, operation=operation)
+                        if not label:
+                            continue
+                        stage_id = signal.node_name or label
+                        stage_meta: dict[str, Any] | None = None
+                        if question_index is not None and question_total is not None:
+                            stage_id = f"{stage_id}:q{question_index}"
+                            stage_meta = {
+                                "question_index": question_index,
+                                "question_total": question_total,
+                            }
+                        await progress(stage_id, label, "running", stage_meta)
+            except Exception as exc:  # pragma: no cover - defensive guard against stalled progress stream
+                startup_error.append(exc)
+                ready.set()
+
+        consumer = asyncio.create_task(consume())
+        await ready.wait()
+        if startup_error:
+            with suppress(asyncio.CancelledError):
+                consumer.cancel()
+                await consumer
+            return await runner()
+        try:
+            return await runner()
+        finally:
+            stop.set()
+            with suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(consumer, timeout=1.5)
+            if not consumer.done():
+                consumer.cancel()
+                with suppress(asyncio.CancelledError):
+                    await consumer
+
+    async def _ensure_agent_session_for_section(
+        self,
+        *,
+        question: ResponseQuestion,
+        section: ResponseDocumentSection,
+        tone: str,
+        session_service: SessionService,
+    ) -> RFPSession:
+        metadata = section.metadata_json if isinstance(section.metadata_json, dict) else {}
+        thread_id = self._metadata_value(metadata, "agent_thread_id") or self._metadata_value(
+            question.metadata_json if isinstance(question.metadata_json, dict) else {},
+            "agent_thread_id",
+        )
+        session = await self._load_agent_session_snapshot(thread_id) if thread_id else None
+
+        if session is None:
+            thread_id = str(uuid.uuid4())
+            session = await session_service.create_or_get_session(
+                thread_id=thread_id,
+                question_text=question.extracted_text,
+                tone=tone,
+            )
+            question.metadata_json = {
+                **(question.metadata_json or {}),
+                "agent_thread_id": thread_id,
+                "agent_session_id": str(session.id),
+            }
+            await self.db.commit()
+            await run_until_human_review(
+                {
+                    "thread_id": thread_id,
+                    "question_text": question.extracted_text,
+                    "tone": tone,
+                    "session_id": str(session.id),
+                },
+                thread_id=thread_id,
+            )
+            refreshed = await self._load_agent_session_snapshot(thread_id)
+            session = refreshed or session
+
+        return session
+
+    async def _load_agent_session_snapshot(self, thread_id: str | None) -> RFPSession | None:
+        """Load an RFPSession in a fresh DB session to avoid stale in-request identity-map state."""
+
+        if not thread_id:
+            return None
+        async with AsyncSessionLocal() as read_db:
+            service = SessionService(read_db)
+            return await service.get_session_by_thread_id(thread_id)
+
+    @staticmethod
+    def _metadata_value(metadata: dict[str, object] | None, key: str) -> str | None:
+        if not isinstance(metadata, dict):
+            return None
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return None
+
+    @staticmethod
+    def _stage_label_for_node(node_name: str | None, *, operation: AgentOperation) -> str | None:
+        if not node_name:
+            return None
+        if operation == "revision":
+            label = REVISION_NODE_STAGE_LABELS.get(node_name)
+            if label:
+                return label
+        return GENERATION_NODE_STAGE_LABELS.get(node_name)
+
+    def _session_evidence_refs(self, session: RFPSession) -> list[EvidenceChunk]:
+        selected = [item for item in (session.selected_evidence_payload or []) if isinstance(item, dict)]
+        base_rows = selected or active_evidence(list(session.evidence_payload or []))
+        evidence_refs: list[EvidenceChunk] = []
+        for row in base_rows:
+            try:
+                evidence_refs.append(EvidenceChunk.model_validate(row))
+            except Exception:
+                continue
+        return evidence_refs
+
+    def _build_section_from_session(
+        self,
+        *,
+        question: ResponseQuestion,
+        session: RFPSession,
+        draft_version_id: UUID,
+    ) -> ResponseDocumentSection:
+        evidence_refs = self._session_evidence_refs(session)
+        confidence_payload = session.confidence_payload or {}
+        content = (session.draft_answer or "").strip()
+
+        return ResponseDocumentSection(
+            draft_version_id=draft_version_id,
+            question_id=question.id,
+            order_index=question.order_index,
+            content_markdown=content,
+            evidence_refs_payload=[item.model_dump(mode="json") for item in evidence_refs],
+            confidence_score=confidence_payload.get("score"),
+            coverage_score=coverage_to_score(confidence_payload.get("coverage")),
+            metadata_json={
+                "agent_thread_id": session.graph_thread_id,
+                "agent_session_id": str(session.id),
+            },
+        )
 
     async def _load_document(self, document_id: UUID) -> _HydratedDocument:
         stmt = (

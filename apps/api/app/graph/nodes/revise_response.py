@@ -41,7 +41,7 @@ async def revise_response_node(nodes, state: WorkflowState) -> WorkflowState:
         revised_text, revised_confidence_notes, revised_confidence_payload, revision_intent, draft_metadata = await revise_answer(
             question=state["question_text"],
             question_type=state.get("question_type", "other"),
-            prior_draft=state.get("draft_answer", ""),
+            prior_draft=(state.get("edited_answer") or state.get("draft_answer") or ""),
             evidence=filtered_evidence,
             reviewer_feedback=state.get("review_comments", ""),
             tone=state.get("tone", "formal"),

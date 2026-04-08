@@ -4,9 +4,11 @@ import { ReviewV2UploadModal } from "@/components/review-v2/review-v2-upload-mod
 import { extractQuestions } from "@/components/review-v2/review-v2-shell-utils";
 import {
   DocumentMetaPanel,
+  GeneratingDraftPreview,
   GenerateCard,
   ProcessingStatusStrip,
   StageCard,
+  VersionRow,
   WorkspaceHeader,
 } from "@/components/review-v2/review-v2-workspace-sections";
 import { ReviewV2EditingView } from "@/components/review-v2/review-v2-editing-view";
@@ -33,6 +35,7 @@ import {
   generateResponseDocument,
   openResponseDocumentEventsStream,
   saveResponseDocumentVersion,
+  type EvidenceItem,
   type ResponseVersionSummary,
   type ResponseDocument,
   type ResponseVersionComparison,
@@ -91,6 +94,8 @@ export function ReviewV2Shell({
   const [compareLeftVersionId, setCompareLeftVersionId] = useState<string | null>(null);
   const [compareRightVersionId, setCompareRightVersionId] = useState<string | null>(null);
   const [stages, setStages] = useState<Stage[]>(emptyStages(GENERATION_STAGE_LABELS));
+  const [runScopeLabel, setRunScopeLabel] = useState<string | null>(null);
+  const [generatingEvidenceByQuestionId, setGeneratingEvidenceByQuestionId] = useState<Record<string, EvidenceItem[]>>({});
   const runEventsRef = useRef<EventSource | null>(null);
   const selectedVersion = document?.selected_version ?? null;
   const versions = document?.versions ?? [];
@@ -148,10 +153,10 @@ export function ReviewV2Shell({
   }, [document, editableSections, hasGlobalEvidenceWarning, selectedVersion]);
   const screenState = !document
     ? "start"
-    : isGenerating
-      ? "generating"
-      : hasDraft
-        ? "editing"
+    : hasDraft
+      ? "editing"
+      : isGenerating
+        ? "generating"
         : "ready_to_generate";
 
   async function runProgress(params: {
@@ -163,6 +168,10 @@ export function ReviewV2Shell({
     const { documentId, operation, labels, action } = params;
     const runId = crypto.randomUUID();
     setStages(emptyStages(labels));
+    setRunScopeLabel(null);
+    if (operation === "generation") {
+      setGeneratingEvidenceByQuestionId({});
+    }
     runEventsRef.current?.close();
     const source = openResponseDocumentEventsStream(documentId);
     runEventsRef.current = source;
@@ -190,9 +199,55 @@ export function ReviewV2Shell({
       if (stageLabel && (stageStatus === "running" || stageStatus === "done")) {
         setStages((previous) => updateStagesFromServer(previous, stageLabel, stageStatus));
       }
+      const questionIndex =
+        typeof metadata.question_index === "number" ? metadata.question_index : null;
+      const questionTotal =
+        typeof metadata.question_total === "number" ? metadata.question_total : null;
+      if (
+        questionIndex &&
+        questionTotal &&
+        Number.isFinite(questionIndex) &&
+        Number.isFinite(questionTotal)
+      ) {
+        setRunScopeLabel(`Question ${questionIndex} of ${questionTotal}`);
+      }
 
       if (payload.reason === "run_completed") {
         setStages((previous) => markAllStagesDone(previous));
+        setActiveRunKind(null);
+        if (operation === "generation") {
+          setIsGenerating(false);
+          setLastRunKind("generation");
+          void fetchResponseDocument(documentId)
+            .then((nextDocument) => {
+              setDocument(nextDocument);
+            })
+            .catch(() => {
+              // keep current state if refresh fails; primary action response can still hydrate
+            });
+        } else {
+          setIsAskingAi(false);
+          setLastRunKind("revision");
+        }
+      }
+
+      const completedQuestionId =
+        typeof metadata.question_id === "string" ? metadata.question_id : null;
+      const completedContent =
+        typeof metadata.content_markdown === "string" ? metadata.content_markdown : null;
+      const questionCompleted = metadata.question_completed === true;
+      if (operation === "generation" && questionCompleted && completedQuestionId && completedContent !== null) {
+        setEditableSections((previous) => ({
+          ...previous,
+          [completedQuestionId]: completedContent,
+        }));
+        const evidenceRefs = Array.isArray(metadata.evidence_refs)
+          ? (metadata.evidence_refs as EvidenceItem[])
+          : [];
+        setGeneratingEvidenceByQuestionId((previous) => ({
+          ...previous,
+          [completedQuestionId]: evidenceRefs,
+        }));
       }
     };
 
@@ -219,6 +274,7 @@ export function ReviewV2Shell({
       setLastRunKind(null);
       setHasRunHistory(false);
       setInspectionPanel(null);
+      setGeneratingEvidenceByQuestionId({});
       setUploadHelperText("Example questions loaded.");
       setUploadErrorText(null);
       setIsUploadModalOpen(false);
@@ -255,6 +311,7 @@ export function ReviewV2Shell({
       setLastRunKind(null);
       setHasRunHistory(false);
       setInspectionPanel(null);
+      setGeneratingEvidenceByQuestionId({});
       setUploadHelperText(
         parsedQuestions.length
           ? `${parsedQuestions.length} question(s) loaded from ${file.name}.`
@@ -496,11 +553,24 @@ export function ReviewV2Shell({
           {screenState === "ready_to_generate" ? (
             <GenerateCard generating={isGenerating} loading={loading} onGenerate={handleGenerateDraft} />
           ) : null}
-          {screenState === "generating" ? (
-            <StageCard
-              title={runContent.title}
-              stages={stages}
-            />
+          {screenState === "generating" && document ? (
+            <>
+              <StageCard title={runContent.title} stages={stages} scopeLabel={runScopeLabel} />
+              {selectedVersion ? (
+                <VersionRow
+                  versions={versions}
+                  selectedVersionId={selectedVersion.id}
+                  loading={loading || isGenerating || !!deletingVersionId}
+                  onSelect={handleSwitchVersion}
+                  onDelete={handleDeleteVersion}
+                />
+              ) : null}
+              <GeneratingDraftPreview
+                questions={document.questions}
+                sectionsByQuestionId={editableSections}
+                evidenceByQuestionId={generatingEvidenceByQuestionId}
+              />
+            </>
           ) : null}
           {screenState === "editing" && document && selectedVersion ? (
             <>
@@ -509,6 +579,7 @@ export function ReviewV2Shell({
                   title={runContent.title}
                   stages={stages}
                   isRunning={isProcessing}
+                  scopeLabel={runScopeLabel}
                 />
               ) : null}
               <ReviewV2EditingView

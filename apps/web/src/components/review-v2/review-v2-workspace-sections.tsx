@@ -157,16 +157,20 @@ export function GenerateCard({ generating, loading, onGenerate }: GenerateCardPr
 type StageCardProps = {
   title: string;
   stages: Stage[];
+  scopeLabel?: string | null;
 };
 
-export function StageCard({ title, stages }: StageCardProps) {
+export function StageCard({ title, stages, scopeLabel = null }: StageCardProps) {
   const currentStage = activeStageLabel(stages);
   const isComplete = stages.length > 0 && stages.every((stage) => stage.status === "done");
   return (
     <section className={styles.centerCard}>
       <div className={styles.processingHeader}>
-        <span className={styles.runSpinner} aria-hidden="true" />
-        <h3>{title}</h3>
+        <span className={isComplete ? styles.processingDoneDot : styles.runSpinner} aria-hidden="true" />
+        <div>
+          <h3>{title}</h3>
+          {scopeLabel ? <p className={styles.questionMeta}>{scopeLabel}</p> : null}
+        </div>
       </div>
       <div className={styles.stageTicker} aria-live="polite">
         <p
@@ -185,9 +189,15 @@ type ProcessingStatusStripProps = {
   title: string;
   stages: Stage[];
   isRunning: boolean;
+  scopeLabel?: string | null;
 };
 
-export function ProcessingStatusStrip({ title, stages, isRunning }: ProcessingStatusStripProps) {
+export function ProcessingStatusStrip({
+  title,
+  stages,
+  isRunning,
+  scopeLabel = null,
+}: ProcessingStatusStripProps) {
   return (
     <section className={styles.processingStrip} aria-live="polite">
       <div className={styles.processingStripLead}>
@@ -197,6 +207,7 @@ export function ProcessingStatusStrip({ title, stages, isRunning }: ProcessingSt
         />
         <div>
           <p className={styles.processingStripTitle}>{title}</p>
+          {scopeLabel ? <p className={styles.questionMeta}>{scopeLabel}</p> : null}
           <p className={styles.processingStripMeta}>
             {isRunning ? activeStageLabel(stages) : "Processing complete"}
           </p>
@@ -318,6 +329,81 @@ export function EditorSurface({
                     <span className={styles.sourceSeparator}> · </span>
                     <span className={styles.sourceTitle}>{sourceDisplayName(item)}</span>
                   </p>
+                      <p className={styles.sourceExcerpt}>{item.text}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </article>
+        );
+      })}
+    </section>
+  );
+}
+
+type GeneratingDraftPreviewProps = {
+  questions: ResponseDocument["questions"];
+  sectionsByQuestionId: Record<string, string>;
+  evidenceByQuestionId: Record<string, EvidenceItem[]>;
+};
+
+export function GeneratingDraftPreview({
+  questions,
+  sectionsByQuestionId,
+  evidenceByQuestionId,
+}: GeneratingDraftPreviewProps) {
+  const [expandedSourcesByQuestionId, setExpandedSourcesByQuestionId] = useState<Record<string, boolean>>({});
+
+  function toggleSources(questionId: string): void {
+    setExpandedSourcesByQuestionId((previous) => ({
+      ...previous,
+      [questionId]: !previous[questionId],
+    }));
+  }
+
+  return (
+    <section className={styles.editorSurface}>
+      {questions.map((question, index) => {
+        const sources = evidenceByQuestionId[question.id] ?? [];
+        const isExpanded = !!expandedSourcesByQuestionId[question.id];
+        return (
+          <article key={question.id} className={styles.sectionCard}>
+            <h3>
+              {index + 1}. {question.extracted_text}
+            </h3>
+            <textarea
+              value={sectionsByQuestionId[question.id] ?? ""}
+              rows={8}
+              readOnly
+              aria-label={`Draft answer for question ${index + 1}`}
+              placeholder="Generating response..."
+            />
+            <div className={styles.supportingSources}>
+              <button
+                type="button"
+                className={styles.showSourcesButton}
+                onClick={() => toggleSources(question.id)}
+              >
+                {isExpanded ? "Hide supporting sources" : `Show supporting sources (${sources.length})`}
+              </button>
+              {isExpanded ? (
+                <div className={styles.supportingSourcesPanel}>
+                  {!sources.length ? (
+                    <p className={styles.questionMeta}>No supporting sources available for this response.</p>
+                  ) : null}
+                  {sources.map((item, sourceIndex) => (
+                    <article
+                      key={`${question.id}-${item.chunk_id}-${item.chunk_index}`}
+                      className={styles.sourceRow}
+                    >
+                      <p className={styles.sourceMeta}>
+                        <span className={styles.sourceIndex}>[{sourceIndex + 1}]</span>{" "}
+                        <span>{toRelevanceLabel(item.score)}</span>
+                        {typeof item.score === "number" ? <span className={styles.sourceScore}> · {item.score.toFixed(2)}</span> : null}
+                        <span className={styles.sourceSeparator}> · </span>
+                        <span className={styles.sourceTitle}>{sourceDisplayName(item)}</span>
+                      </p>
                       <p className={styles.sourceExcerpt}>{item.text}</p>
                     </article>
                   ))}

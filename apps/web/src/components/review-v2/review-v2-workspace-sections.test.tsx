@@ -6,7 +6,9 @@ import {
   ActivityPanel,
   DocumentMetaPanel,
   EditorSurface,
+  GeneratingDraftPreview,
   ProcessingStatusStrip,
+  StageCard,
   VersionRow,
 } from "@/components/review-v2/review-v2-workspace-sections";
 import type { ResponseDocument } from "@/lib/api";
@@ -195,6 +197,73 @@ describe("ProcessingStatusStrip", () => {
     expect(screen.getByText("Applying revision")).toBeInTheDocument();
     expect(screen.getByText("Revise draft text")).toBeInTheDocument();
     expect(screen.getByText("In progress")).toBeInTheDocument();
+  });
+});
+
+describe("StageCard", () => {
+  it("shows completion state when all stages are done", () => {
+    const { container } = render(
+      <StageCard
+        title="Generating draft"
+        stages={[
+          { label: "Retrieve supporting material", status: "done" },
+          { label: "Rank evidence", status: "done" },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Processing complete")).toBeInTheDocument();
+    const indicator = container.querySelector('[aria-hidden="true"]');
+    expect(indicator).toBeTruthy();
+    expect(indicator?.className).toMatch(/processingDoneDot/);
+    expect(indicator?.className).not.toMatch(/runSpinner/);
+  });
+});
+
+describe("GeneratingDraftPreview", () => {
+  it("shows streamed answer content for completed questions", () => {
+    const document = buildDocument();
+    render(
+      <GeneratingDraftPreview
+        questions={document.questions.slice(0, 2)}
+        sectionsByQuestionId={{ q1: "Generated answer 1", q2: "" }}
+        evidenceByQuestionId={{}}
+      />,
+    );
+
+    expect(screen.getByLabelText("Draft answer for question 1")).toHaveValue("Generated answer 1");
+    expect(screen.getByLabelText("Draft answer for question 2")).toHaveValue("");
+  });
+
+  it("renders per-question supporting sources toggle while generating", async () => {
+    const user = userEvent.setup();
+    const document = buildDocument();
+    render(
+      <GeneratingDraftPreview
+        questions={document.questions.slice(0, 1)}
+        sectionsByQuestionId={{ q1: "Generated answer 1" }}
+        evidenceByQuestionId={{
+          q1: [
+            {
+              chunk_id: "chunk-1",
+              document_id: "doc-1",
+              document_title: "Prior RFP Answers",
+              document_filename: "prior_rfp_answers.md",
+              chunk_index: 2,
+              text: "We have extensive experience investing in renewable energy infrastructure.",
+              score: 0.91,
+              retrieval_method: "semantic",
+              metadata: {},
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Show supporting sources (1)" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show supporting sources (1)" }));
+    expect(screen.getByRole("button", { name: "Hide supporting sources" })).toBeInTheDocument();
+    expect(screen.getByText(/Prior RFP Answers/)).toBeInTheDocument();
   });
 });
 
