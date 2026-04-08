@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 
-from app.core.client_config import load_branding_config, load_client_manifest, load_workspace_config
+from app.core.client_config import (
+    load_branding_config,
+    load_client_manifest,
+    load_workspace_config,
+    resolve_config_path,
+)
 from app.schemas.client_config import ClientManifestOut, WorkspaceBrandingOut, WorkspaceClientConfigOut
 
 router = APIRouter(prefix="/api/client-config", tags=["client-config"])
@@ -48,6 +55,45 @@ def _read_string_list(payload: dict[str, Any], key: str) -> list[str]:
     return values
 
 
+def _normalize_logo_src(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    candidate = value.strip()
+    if not candidate:
+        return None
+    if candidate.startswith(("http://", "https://", "/")):
+        return candidate
+
+    if candidate.startswith("config/assets/"):
+        rel_path = candidate.removeprefix("config/assets/").strip("/")
+    elif candidate.startswith("assets/"):
+        rel_path = candidate.removeprefix("assets/").strip("/")
+    else:
+        rel_path = Path(candidate).name
+
+    if not rel_path:
+        return None
+    return f"/api/client-config/assets/{rel_path}"
+
+
+@router.get("/assets/{asset_path:path}")
+async def get_client_config_asset(asset_path: str) -> FileResponse:
+    """Serve client asset files from repo-level `config/assets`."""
+
+    safe_rel = asset_path.strip().lstrip("/")
+    assets_root = resolve_config_path("assets").resolve()
+    target = (assets_root / safe_rel).resolve()
+    try:
+        target.relative_to(assets_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Client asset not found.") from exc
+
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Client asset not found.")
+    return FileResponse(target)
+
+
 @router.get("/workspace", response_model=WorkspaceClientConfigOut)
 async def get_workspace_client_config() -> WorkspaceClientConfigOut:
     """Expose client, branding, and workspace config for frontend initialization."""
@@ -64,11 +110,12 @@ async def get_workspace_client_config() -> WorkspaceClientConfigOut:
     )
 
     company_name = _read_string(branding_payload, "company_name", client.display_name)
-    logo_src = (
+    logo_src_raw = (
         _read_optional_string(branding_payload, "logo_src")
         or _read_optional_string(branding_payload, "logo_url")
         or _read_optional_string(branding_payload, "logo_path")
     )
+    logo_src = _normalize_logo_src(logo_src_raw)
     branding = WorkspaceBrandingOut(
         company_name=company_name,
         logo_src=logo_src,
