@@ -53,6 +53,7 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - API prompt loading now resolves `config/prompts/<prompt>/<system|user>.md` first and falls back to `apps/api/app/prompts/<prompt>/<system|user>.md`; JSON client config loaders live in `app/core/client_config.py`.
 - Frontend workspace branding now loads from API endpoint `/api/client-config/workspace` (client/branding/workspace payload) with env/default fallback in the web app.
 - Frontend review-v2 workspace now applies `workspace.json` `ui_flags` and wording from `/api/client-config/workspace` (example-question visibility, source filename visibility, revision scope availability, revision submit/validation copy, and approval button/helper copy).
+- Seed corpus markdown files now live under `config/documents/data`; `apps/api/scripts/seed_data.py` ingests from that directory (not `data/docs`).
 
 ## Example update
 
