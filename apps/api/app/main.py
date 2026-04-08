@@ -15,6 +15,7 @@ from app.routes.auth import router as auth_router
 from app.routes.documents import router as documents_router
 from app.routes.evals import router as evals_router
 from app.routes.health import router as health_router
+from app.routes.response_documents import router as response_documents_router
 from app.routes.review import router as review_router
 from app.services.workflow_events import workflow_event_bus
 
@@ -67,6 +68,7 @@ def create_app(*, register_startup: bool = True) -> FastAPI:
     application.include_router(ask_router)
     application.include_router(review_router)
     application.include_router(documents_router)
+    application.include_router(response_documents_router)
     application.include_router(evals_router)
     return application
 

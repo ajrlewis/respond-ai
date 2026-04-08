@@ -16,6 +16,7 @@ import {
   evidenceKey,
   nodeProgressLabel,
 } from "@/lib/workflow";
+import { type WorkflowActivityEvent } from "@/lib/review-models";
 
 export type ReviewMode = "none" | "revise";
 
@@ -29,6 +30,7 @@ type ApproveContext = {
 type SubmitRevisionContext = {
   selectedDraft: AnswerVersion | null;
   isCompareMode: boolean;
+  feedbackOverride?: string;
   onSuccess?: () => void;
 };
 
@@ -36,7 +38,7 @@ type GenerateDraftContext = {
   onBeforeStart?: () => void;
 };
 
-type UseWorkflowResult = {
+export type UseWorkflowResult = {
   question: string;
   tone: Tone;
   feedback: string;
@@ -62,6 +64,7 @@ type UseWorkflowResult = {
   isGapAcknowledged: boolean;
   approveWarning: boolean;
   timelineText: string;
+  activityEvents: WorkflowActivityEvent[];
   setQuestion: (value: string) => void;
   setTone: (value: Tone) => void;
   setFeedback: (value: string) => void;
@@ -94,10 +97,12 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
   const [excludedEvidenceKeys, setExcludedEvidenceKeys] = useState<Set<string>>(new Set<string>());
   const [reviewedEvidenceGaps, setReviewedEvidenceGaps] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activityEvents, setActivityEvents] = useState<WorkflowActivityEvent[]>([]);
   const eventSourceRef = useRef<EventSource | null>(null);
   const eventSourceKeyRef = useRef<string | null>(null);
   const isGeneratingDraftRef = useRef(false);
   const isSubmittingRevisionRef = useRef(false);
+  const eventCounterRef = useRef(0);
 
   const canSubmit = question.trim().length >= 10 && !loading;
   const isApproved = session?.status === "approved";
@@ -149,6 +154,20 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
         } catch {
           return;
         }
+
+        eventCounterRef.current += 1;
+        const timestamp = payload.timestamp ?? new Date().toISOString();
+        setActivityEvents((previous) => {
+          const nextEvent: WorkflowActivityEvent = {
+            id: `${timestamp}-${eventCounterRef.current}`,
+            timestamp,
+            reason: payload.reason || "workflow_state",
+            node: payload.node ?? payload.session?.current_node ?? null,
+            status: payload.status ?? payload.session?.status ?? null,
+            error: payload.error ?? null,
+          };
+          return [...previous.slice(-119), nextEvent];
+        });
 
         if (payload.error) {
           setError(payload.error);
@@ -250,6 +269,7 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
     setIsReviewSummaryExpanded(false);
     setIsEvidenceGapsExpanded(false);
     setIsRevisionHistoryExpanded(false);
+    setActivityEvents([]);
     setFeedback("");
     setSession(null);
     setExcludedEvidenceKeys(new Set<string>());
@@ -348,7 +368,9 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
       return;
     }
 
-    if (!feedback.trim() && excludedEvidenceKeys.size === 0) {
+    const feedbackText = (context.feedbackOverride ?? feedback).trim();
+
+    if (!feedbackText && excludedEvidenceKeys.size === 0) {
       setError("Add revision feedback or exclude a citation chunk before submitting.");
       return;
     }
@@ -363,7 +385,7 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
     try {
       const next = await reviewSession(activeSessionId, "revise", {
         reviewerId: reviewerId?.trim() || undefined,
-        reviewComments: feedback.trim() || undefined,
+        reviewComments: feedbackText || undefined,
         excludedEvidenceKeys: Array.from(excludedEvidenceKeys),
         evidenceGapsAcknowledged: isGapAcknowledged,
       });
@@ -415,6 +437,7 @@ export function useWorkflow(reviewerId?: string): UseWorkflowResult {
     isGapAcknowledged,
     approveWarning,
     timelineText,
+    activityEvents,
     setQuestion,
     setTone,
     setFeedback,

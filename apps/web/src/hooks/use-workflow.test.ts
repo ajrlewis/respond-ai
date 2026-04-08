@@ -57,6 +57,9 @@ describe("useWorkflow", () => {
       expect(result.current.isGeneratingDraft).toBe(false);
       expect(result.current.generationProgress).toBe("Draft ready for review.");
     });
+
+    expect(result.current.activityEvents.length).toBeGreaterThan(0);
+    expect(result.current.activityEvents[result.current.activityEvents.length - 1]?.node).toBe("human_review");
   });
 
   it("surfaces API errors for draft generation", async () => {
@@ -129,5 +132,92 @@ describe("useWorkflow", () => {
     expect(result.current.error).toBe("Review and acknowledge evidence gaps before approval.");
     expect(result.current.isReviewSummaryExpanded).toBe(true);
     expect(result.current.isEvidenceGapsExpanded).toBe(true);
+  });
+
+  it("submits revision with feedbackOverride when provided", async () => {
+    const askedSession = buildSession({
+      id: "session-revise-1",
+      status: "draft",
+      current_node: "draft_response",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    });
+    const settledSession = buildSession({
+      id: "session-revise-1",
+      status: "awaiting_review",
+      current_node: "human_review",
+      updated_at: "2026-01-01T00:01:00.000Z",
+    });
+    const revisionRequestedSession = buildSession({
+      id: "session-revise-1",
+      status: "revision_requested",
+      current_node: "revise_response",
+      updated_at: "2026-01-01T00:02:00.000Z",
+    });
+    const settledRevisionSession = buildSession({
+      id: "session-revise-1",
+      status: "awaiting_review",
+      current_node: "human_review",
+      updated_at: "2026-01-01T00:03:00.000Z",
+    });
+
+    let submittedReviewComments: string | null = null;
+
+    server.use(
+      http.post(`${API_BASE_URL}/api/questions/ask`, () => HttpResponse.json({ session: askedSession })),
+      http.post(`${API_BASE_URL}/api/questions/session-revise-1/review`, async ({ request }) => {
+        const payload = (await request.json()) as { review_comments?: string };
+        submittedReviewComments = payload.review_comments ?? null;
+        return HttpResponse.json({ session: revisionRequestedSession });
+      }),
+    );
+
+    const { result } = renderHook(() => useWorkflow("reviewer-1"));
+
+    act(() => {
+      result.current.setQuestion("Update language to emphasize downside protection and drawdown controls.");
+    });
+
+    await act(async () => {
+      await result.current.handleGenerateDraft();
+    });
+
+    act(() => {
+      getLatestMockEventSource()?.emit("workflow_state", {
+        reason: "update",
+        session: settledSession,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.isGeneratingDraft).toBe(false);
+    });
+
+    act(() => {
+      result.current.setFeedback("Ignore this feedback value.");
+    });
+
+    await act(async () => {
+      await result.current.handleSubmitRevision({
+        selectedDraft: null,
+        isCompareMode: false,
+        feedbackOverride: "Apply inline edits and keep citations unchanged.",
+      });
+    });
+
+    expect(submittedReviewComments).toBe("Apply inline edits and keep citations unchanged.");
+
+    act(() => {
+      getLatestMockEventSource()?.emit("workflow_state", {
+        reason: "update",
+        session: settledRevisionSession,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.isSubmittingRevision).toBe(false);
+      expect(result.current.session?.status).toBe("awaiting_review");
+    });
   });
 });

@@ -40,6 +40,9 @@ Write to this file when you discover, confirm, or change durable facts, includin
 ## RespondAI facts
 
 - The `api` Docker image installs with `uv sync --no-dev`, so `pytest` is not available inside `docker compose exec api ...`; run API tests from `apps/api` on host instead.
+- Document-centric drafting API is available at `/api/response-documents` (create, generate, save versions, compare versions, AI revise) and is used by the `review-v2` workspace.
+- Docker Compose `api` service now runs `uv run alembic upgrade head` before `uvicorn` startup so schema head stays aligned at boot.
+- Web app proxies `/api/*` and `/auth/*` via Next.js rewrites; configure `API_BASE_URL` for the upstream API target (Docker Compose defaults to `http://api:8000` for web build/runtime).
 
 ## Example update
 

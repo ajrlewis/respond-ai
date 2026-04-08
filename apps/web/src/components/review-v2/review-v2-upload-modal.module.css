@@ -1,0 +1,71 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(16, 24, 36, 0.3);
+  padding: 16px;
+}
+
+.modal {
+  width: min(560px, 100%);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-lg);
+  background: #ffffff;
+  box-shadow: 0 20px 36px rgba(18, 32, 47, 0.18);
+  padding: 24px;
+  display: grid;
+  gap: 12px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 640;
+}
+
+.fieldLabel {
+  margin: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+
+.modal input[type="file"] {
+  width: 100%;
+}
+
+.helper {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.error {
+  margin: 0;
+  color: #b44a3f;
+  font-size: 0.84rem;
+}
+
+.actions {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.secondaryButton,
+.ghostButton {
+  background: #ffffff !important;
+  color: #23405a !important;
+  border: 1px solid var(--stroke-strong) !important;
+}

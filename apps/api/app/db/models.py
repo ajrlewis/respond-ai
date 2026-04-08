@@ -56,6 +56,131 @@ class DocumentChunk(Base):
     document: Mapped[Document] = relationship(back_populates="chunks")
 
 
+class ResponseDocument(Base):
+    """Represents a multi-question response drafting workspace."""
+
+    __tablename__ = "response_documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    created_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    questions: Mapped[list["ResponseQuestion"]] = relationship(
+        back_populates="response_document",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ResponseQuestion.order_index",
+    )
+    versions: Mapped[list["ResponseDocumentVersion"]] = relationship(
+        back_populates="response_document",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ResponseDocumentVersion.version_number",
+    )
+
+
+class ResponseQuestion(Base):
+    """Question extracted or provided for a response document."""
+
+    __tablename__ = "response_questions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    response_document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("response_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    order_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    extracted_text: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    response_document: Mapped[ResponseDocument] = relationship(back_populates="questions")
+    sections: Mapped[list["ResponseDocumentSection"]] = relationship(
+        back_populates="question",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class ResponseDocumentVersion(Base):
+    """Snapshot of all sections in a response document."""
+
+    __tablename__ = "response_document_versions"
+    __table_args__ = (UniqueConstraint("response_document_id", "version_number", name="uq_response_doc_version_number"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    response_document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("response_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    label: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    parent_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("response_document_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    is_final: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    response_document: Mapped[ResponseDocument] = relationship(back_populates="versions")
+    sections: Mapped[list["ResponseDocumentSection"]] = relationship(
+        back_populates="version",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ResponseDocumentSection.order_index",
+    )
+
+
+class ResponseDocumentSection(Base):
+    """Draft content for a question inside a specific document version."""
+
+    __tablename__ = "response_document_sections"
+    __table_args__ = (UniqueConstraint("draft_version_id", "question_id", name="uq_response_doc_section_question"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    draft_version_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("response_document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    question_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("response_questions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    order_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_markdown: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    evidence_refs_payload: Mapped[list[dict]] = mapped_column(JSONB, default=list)
+    confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    coverage_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    version: Mapped[ResponseDocumentVersion] = relationship(back_populates="sections")
+    question: Mapped[ResponseQuestion] = relationship(back_populates="sections")
+
+
 class RFPSession(Base):
     """Business workflow session for an RFP question."""
 

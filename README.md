@@ -80,6 +80,59 @@ Implementation notes:
 - Immutable final audit snapshot (`GET /api/questions/{session_id}/audit`)
 - Alembic-managed schema with startup revision checks
 
+## Document-Centric Drafting (v2)
+
+The `review-v2` UI now supports a document-first drafting model where multiple questions are edited as one response document.
+
+### New Domain Model
+
+- `response_documents`: workspace container and source metadata
+- `response_questions`: extracted/provided questions with stable order
+- `response_document_versions`: durable document snapshots
+- `response_document_sections`: per-question section content inside a version
+
+Each version snapshots all sections so version switching and comparison stay coherent at document level.
+
+### New API Surface
+
+- `POST /api/response-documents`
+  - Create document from source text/questions
+- `POST /api/response-documents/sample`
+  - Create sample 3-question document for demos
+- `GET /api/response-documents/{document_id}`
+  - Load document, versions, and selected version
+- `POST /api/response-documents/{document_id}/generate`
+  - Generate answers for all questions, save as new version
+- `GET /api/response-documents/{document_id}/versions`
+  - List version metadata
+- `POST /api/response-documents/{document_id}/versions`
+  - Save current edits as a new version
+- `POST /api/response-documents/{document_id}/versions/{version_id}/approve`
+  - Mark a saved version as approved/final
+- `DELETE /api/response-documents/{document_id}/versions/{version_id}`
+  - Delete a saved version and return refreshed document state
+- `GET /api/response-documents/{document_id}/compare`
+  - Compare two versions with readable diff segments
+- `POST /api/response-documents/{document_id}/ai-revise`
+  - Return AI revision suggestions for whole document or one section (does not auto-save)
+
+### Compatibility
+
+- Existing question workflow routes remain available under `/api/questions/*`.
+- Existing ask/review SSE workflow is unchanged for legacy review screens.
+- `review-v2` now uses response-document endpoints and a version-centric editing UX.
+
+## Migration Notes
+
+- Added Alembic revision: `9f2c0a1f4d18_add_response_document_tables.py`.
+- Run migrations before using `review-v2`:
+
+```bash
+cd apps/api && uv run alembic upgrade head
+```
+
+- No destructive migration of legacy `rfp_sessions` data is required; old and new models coexist.
+
 ## Prerequisites
 
 - Docker + Docker Compose

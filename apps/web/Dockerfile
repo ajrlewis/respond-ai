@@ -2,6 +2,10 @@
 FROM oven/bun:1.2.23-alpine AS base
 WORKDIR /app
 
+# API proxy target used by next.config rewrites during build.
+ARG API_BASE_URL=http://localhost:8000
+ENV API_BASE_URL=${API_BASE_URL}
+
 # 1. Install dependencies only when package.json or bun.lockb changes
 COPY package.json bun.lockb* ./
 RUN bun install --frozen-lockfile
