@@ -1,4 +1,4 @@
-"""Prompt asset loader for markdown prompts under app/prompts."""
+"""Prompt asset loader with `config/prompts` override support."""
 
 from __future__ import annotations
 
@@ -7,9 +7,13 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping, Literal
 
+from app.core.client_config import resolve_config_path
+
 TemplateName = Literal["system", "user"]
 
 _PROMPTS_ROOT = Path(__file__).resolve().parent
+_CONFIG_PROMPTS_ROOT = resolve_config_path("prompts")
+_PROMPT_TEMPLATE_ROOTS = (_CONFIG_PROMPTS_ROOT, _PROMPTS_ROOT)
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,14 +26,17 @@ class PromptPair:
 
 @lru_cache(maxsize=256)
 def _load_prompt_text(prompt_name: str, template_name: TemplateName) -> str:
-    path = _PROMPTS_ROOT / prompt_name / f"{template_name}.md"
-    if not path.exists():
-        raise RuntimeError(f"Prompt template not found: {prompt_name}/{template_name}")
+    for root in _PROMPT_TEMPLATE_ROOTS:
+        path = root / prompt_name / f"{template_name}.md"
+        if not path.exists():
+            continue
 
-    content = path.read_text(encoding="utf-8").strip()
-    if not content:
-        raise RuntimeError(f"Prompt template is empty: {prompt_name}/{template_name}")
-    return content
+        content = path.read_text(encoding="utf-8").strip()
+        if not content:
+            raise RuntimeError(f"Prompt template is empty: {prompt_name}/{template_name}")
+        return content
+
+    raise RuntimeError(f"Prompt template not found: {prompt_name}/{template_name}")
 
 
 def load_system_prompt(prompt_name: str) -> str:

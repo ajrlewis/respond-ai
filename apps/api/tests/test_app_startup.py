@@ -43,12 +43,16 @@ def test_startup_validates_schema_revision(monkeypatch) -> None:
     async def fake_assert_schema_current_async() -> None:
         calls.append("assert_schema_current_async")
 
+    async def fake_ensure_checkpointer_ready() -> None:
+        calls.append("ensure_checkpointer_ready")
+
     class FakeEventBus:
         async def close(self) -> None:
             calls.append("workflow_event_bus.close")
 
     monkeypatch.setattr(main_module, "validate_ai_configuration", fake_validate_ai_configuration)
     monkeypatch.setattr(main_module, "assert_schema_current_async", fake_assert_schema_current_async)
+    monkeypatch.setattr(main_module, "ensure_checkpointer_ready", fake_ensure_checkpointer_ready)
     monkeypatch.setattr(main_module, "workflow_event_bus", FakeEventBus())
 
     with TestClient(main_module.create_app(register_startup=True)) as client:
@@ -57,4 +61,5 @@ def test_startup_validates_schema_revision(monkeypatch) -> None:
 
     assert "validate_ai_configuration" in calls
     assert "assert_schema_current_async" in calls
+    assert "ensure_checkpointer_ready" in calls
     assert "workflow_event_bus.close" in calls

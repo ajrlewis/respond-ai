@@ -11,29 +11,24 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 from app.core.database import SessionLocal
+from app.core.client_config import resolve_config_path
 from app.db.migration_check import assert_schema_current_sync
 from app.services.ingestion import IngestionService
 
 
 def _resolve_docs_dir() -> Path:
-    """Resolve the seed docs directory in local and container layouts."""
+    """Resolve markdown seed directory under repo-level `config/documents/data`."""
 
-    script_path = Path(__file__).resolve()
-    candidates = [script_path.parent]
-    candidates.extend(list(script_path.parents))
-
-    for base_path in candidates:
-        docs_dir = base_path / "data" / "docs"
-        if docs_dir.exists():
-            return docs_dir
-
+    docs_dir = resolve_config_path("documents/data")
+    if docs_dir.exists() and docs_dir.is_dir():
+        return docs_dir
     raise FileNotFoundError(
-        "Seed docs directory not found. Expected a `data/docs` directory in a parent path."
+        "Seed docs directory not found. Expected `config/documents/data`."
     )
 
 
 def main() -> None:
-    """Run seed ingestion from /data/docs."""
+    """Run seed ingestion from `config/documents/data`."""
 
     docs_dir = _resolve_docs_dir()
 

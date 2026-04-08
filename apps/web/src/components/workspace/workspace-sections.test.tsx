@@ -100,6 +100,25 @@ describe("DocumentMetaPanel", () => {
     expect(screen.getByText("3 questions · Source: sample-questions.md")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Upload document" })).not.toBeInTheDocument();
   });
+
+  it("hides example action and source filename when workspace flags disable them", () => {
+    render(
+      <DocumentMetaPanel
+        document={buildDocument()}
+        title="Submission Workspace"
+        subtitle="Upload a questionnaire or start from example questions."
+        loading={false}
+        showExampleQuestions={false}
+        showSourceFilename={false}
+        onUpload={vi.fn()}
+        onUseExamples={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Use example questions" })).not.toBeInTheDocument();
+    expect(screen.getByText("3 questions")).toBeInTheDocument();
+    expect(screen.queryByText(/Source:/)).not.toBeInTheDocument();
+  });
 });
 
 describe("VersionRow", () => {
@@ -285,6 +304,35 @@ describe("AIComposer", () => {
 
     await user.selectOptions(screen.getByLabelText("Question"), "q2");
     expect(onQuestionChange).toHaveBeenCalledWith("q2");
+  });
+
+  it("applies revision wording and scope flags from workspace config", () => {
+    render(
+      <AIComposer
+        instruction=""
+        askingAi={false}
+        loading={false}
+        scope="selected_question"
+        allowQuestionScope={false}
+        allowWholeDocumentScope
+        helperText="Describe specific edits and keep requests aligned to available evidence."
+        submitButtonLabel="Request Revision"
+        questions={[
+          { id: "q1", label: "Question 1" },
+        ]}
+        selectedQuestionId="q1"
+        onInstructionChange={vi.fn()}
+        onScopeChange={vi.fn()}
+        onQuestionChange={vi.fn()}
+        onApply={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Scope")).not.toBeInTheDocument();
+    expect(screen.getByText("Describe specific edits and keep requests aligned to available evidence.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Request Revision" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Question")).not.toBeInTheDocument();
   });
 });
 

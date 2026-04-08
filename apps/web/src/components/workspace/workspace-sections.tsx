@@ -119,6 +119,9 @@ type DocumentMetaPanelProps = {
   loading: boolean;
   onUpload: () => void;
   onUseExamples: () => void;
+  showExampleQuestions?: boolean;
+  showSourceFilename?: boolean;
+  exampleQuestionsButtonLabel?: string;
 };
 
 export function DocumentMetaPanel({
@@ -128,6 +131,9 @@ export function DocumentMetaPanel({
   loading,
   onUpload,
   onUseExamples,
+  showExampleQuestions = true,
+  showSourceFilename = true,
+  exampleQuestionsButtonLabel = "Use example questions",
 }: DocumentMetaPanelProps) {
   if (!document) {
     return (
@@ -139,9 +145,11 @@ export function DocumentMetaPanel({
             <button type="button" onClick={onUpload} disabled={loading}>
               Upload document
             </button>
-            <button type="button" className={styles.secondaryButton} onClick={onUseExamples} disabled={loading}>
-              Use example questions
-            </button>
+            {showExampleQuestions ? (
+              <button type="button" className={styles.secondaryButton} onClick={onUseExamples} disabled={loading}>
+                {exampleQuestionsButtonLabel}
+              </button>
+            ) : null}
           </div>
         </div>
       </section>
@@ -154,7 +162,7 @@ export function DocumentMetaPanel({
         <h2>{document.title || "Response draft"}</h2>
         <p className={styles.questionMeta}>
           {document.questions.length} questions
-          {document.source_filename ? ` · Source: ${document.source_filename}` : ""}
+          {showSourceFilename && document.source_filename ? ` · Source: ${document.source_filename}` : ""}
         </p>
       </div>
     </section>
@@ -246,6 +254,10 @@ type AIComposerProps = {
   loading: boolean;
   mode?: "default" | "overlay";
   scope: "selected_question" | "whole_document";
+  allowQuestionScope?: boolean;
+  allowWholeDocumentScope?: boolean;
+  helperText?: string;
+  submitButtonLabel?: string;
   questions: Array<{ id: string; label: string }>;
   selectedQuestionId: string | null;
   onInstructionChange: (value: string) => void;
@@ -261,6 +273,10 @@ export function AIComposer({
   loading,
   mode = "default",
   scope,
+  allowQuestionScope = true,
+  allowWholeDocumentScope = true,
+  helperText = "Agent will plan and apply edits for the selected scope.",
+  submitButtonLabel = "Submit",
   questions,
   selectedQuestionId,
   onInstructionChange,
@@ -270,27 +286,36 @@ export function AIComposer({
   onCancel,
 }: AIComposerProps) {
   const hasQuestions = questions.length > 0;
+  const availableScopes: Array<"selected_question" | "whole_document"> = [];
+  if (allowQuestionScope) availableScopes.push("selected_question");
+  if (allowWholeDocumentScope) availableScopes.push("whole_document");
+  if (!availableScopes.length) {
+    availableScopes.push("selected_question");
+  }
+  const selectedScope = availableScopes.includes(scope) ? scope : availableScopes[0];
   const composerClassName =
     mode === "overlay" ? `${styles.aiComposer} ${styles.aiComposerOverlay}` : styles.aiComposer;
   return (
     <section className={composerClassName}>
       <p className={styles.sectionLabel}>Suggest changes</p>
-      <label htmlFor="revision-scope" className={styles.fieldLabel}>
-        Scope
-      </label>
-      <select
-        id="revision-scope"
-        value={scope}
-        onChange={(event) => onScopeChange(event.target.value as "selected_question" | "whole_document")}
-        disabled={askingAi || loading}
-      >
-        <option value="selected_question">Selected question</option>
-        <option value="whole_document">Whole document</option>
-      </select>
-      <p className={styles.questionMeta}>
-        Agent will plan and apply edits for the selected scope.
-      </p>
-      {scope === "selected_question" ? (
+      {availableScopes.length > 1 ? (
+        <>
+          <label htmlFor="revision-scope" className={styles.fieldLabel}>
+            Scope
+          </label>
+          <select
+            id="revision-scope"
+            value={selectedScope}
+            onChange={(event) => onScopeChange(event.target.value as "selected_question" | "whole_document")}
+            disabled={askingAi || loading}
+          >
+            {allowQuestionScope ? <option value="selected_question">Selected question</option> : null}
+            {allowWholeDocumentScope ? <option value="whole_document">Whole document</option> : null}
+          </select>
+        </>
+      ) : null}
+      <p className={styles.questionMeta}>{helperText}</p>
+      {selectedScope === "selected_question" ? (
         <>
           <label htmlFor="revision-question" className={styles.fieldLabel}>
             Question
@@ -321,7 +346,7 @@ export function AIComposer({
       />
       <div className={styles.aiActions}>
         <button type="button" onClick={onApply} disabled={askingAi || loading}>
-          {askingAi ? "Applying..." : "Submit"}
+          {askingAi ? "Applying..." : submitButtonLabel}
         </button>
         <button type="button" className={styles.secondaryButton} onClick={onCancel}>
           Cancel

@@ -36,6 +36,7 @@ services:
       - seccomp=unconfined
     volumes:
       - ./data:/app/data:ro
+      - ./config:/app/config:ro
     environment:
       DATABASE_URL: postgresql+psycopg://respondai:respondai@postgres:5432/respondai
       APP_REDIS_URL: ${APP_REDIS_URL:-redis://redis:6379/0}
@@ -88,6 +89,7 @@ services:
       - seccomp=unconfined
     volumes:
       - ./data:/app/data:ro
+      - ./config:/app/config:ro
     command: ["uv", "run", "celery", "-A", "app.core.celery_app.celery_app", "worker", "--loglevel=INFO"]
     environment:
       DATABASE_URL: postgresql+psycopg://respondai:respondai@postgres:5432/respondai

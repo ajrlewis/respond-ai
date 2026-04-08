@@ -107,6 +107,28 @@ export type AuthUser = {
   username: string;
 };
 
+export type WorkspaceClientManifest = {
+  client_id: string;
+  display_name: string;
+  environment_label: string;
+  enabled_features: string[];
+};
+
+export type WorkspaceBrandingConfig = {
+  company_name: string;
+  logo_src: string | null;
+  workspace_title: string;
+  workspace_subtitle: string;
+  start_title: string;
+  start_subtitle: string;
+};
+
+export type WorkspaceClientConfig = {
+  client: WorkspaceClientManifest;
+  branding: WorkspaceBrandingConfig;
+  workspace: Record<string, unknown>;
+};
+
 export type ResponseQuestion = {
   id: string;
   order_index: number;
@@ -387,6 +409,23 @@ export async function fetchCurrentUser(): Promise<AuthUser | null> {
 
   const payload = (await response.json()) as AuthResponse;
   return payload.user;
+}
+
+export async function fetchWorkspaceClientConfig(): Promise<WorkspaceClientConfig | null> {
+  const response = await fetch(`${API_BASE_URL}/api/client-config/workspace`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  return (await response.json()) as WorkspaceClientConfig;
 }
 
 export async function createResponseDocument(payload: {

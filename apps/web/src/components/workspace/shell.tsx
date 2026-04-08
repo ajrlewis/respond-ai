@@ -24,7 +24,14 @@ import {
   updateStagesFromServer,
   type Stage,
 } from "@/components/workspace/shell-helpers";
-import { reviewWorkspaceBranding } from "@/config/review-workspace";
+import {
+  applyReviewWorkspaceBrandingOverride,
+  reviewWorkspaceBranding,
+  applyReviewWorkspaceSettingsOverride,
+  reviewWorkspaceSettings,
+  type ReviewWorkspaceBranding,
+  type ReviewWorkspaceSettings,
+} from "@/config/review-workspace";
 import {
   aiReviseResponseDocument,
   approveResponseDocumentVersion,
@@ -33,6 +40,7 @@ import {
   createSampleResponseDocument,
   deleteResponseDocumentVersion,
   fetchResponseDocument,
+  fetchWorkspaceClientConfig,
   generateResponseDocument,
   openResponseDocumentEventsStream,
   saveResponseDocumentVersion,
@@ -73,6 +81,8 @@ export function ReviewV2Shell({
   isLoggingOut = false,
   onLogout,
 }: ReviewV2ShellProps) {
+  const [workspaceBranding, setWorkspaceBranding] = useState<ReviewWorkspaceBranding>(reviewWorkspaceBranding);
+  const [workspaceSettings, setWorkspaceSettings] = useState<ReviewWorkspaceSettings>(reviewWorkspaceSettings);
   const [document, setDocument] = useState<ResponseDocument | null>(null);
   const [editableSections, setEditableSections] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -106,6 +116,10 @@ export function ReviewV2Shell({
   const versions = document?.versions ?? [];
   const questions = document?.questions ?? [];
   const isProcessing = isGenerating || isAskingAi;
+  const allowQuestionScopedRevision = workspaceSettings.uiFlags.allowQuestionScopedRevision;
+  const allowFullDocumentRevision = workspaceSettings.uiFlags.allowFullDocumentRevision;
+  const canSuggestChanges = allowQuestionScopedRevision || allowFullDocumentRevision;
+  const canUseExampleQuestions = workspaceSettings.uiFlags.showExampleQuestions;
   const runKindForDisplay = activeRunKind ?? lastRunKind;
   const runContent = runKindForDisplay ? runCopy(runKindForDisplay) : runCopy("generation");
 
@@ -147,10 +161,51 @@ export function ReviewV2Shell({
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const loadWorkspaceConfig = async () => {
+      try {
+        const payload = await fetchWorkspaceClientConfig();
+        if (cancelled || !payload) return;
+        setWorkspaceBranding((previous) => applyReviewWorkspaceBrandingOverride(previous, payload.branding));
+        setWorkspaceSettings((previous) =>
+          applyReviewWorkspaceSettingsOverride(previous, payload.workspace),
+        );
+      } catch {
+        // Keep env/default workspace branding when client config endpoint is unavailable.
+      }
+    };
+
+    void loadWorkspaceConfig();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!notice) return;
     const timeout = window.setTimeout(() => setNotice(null), 3200);
     return () => window.clearTimeout(timeout);
   }, [notice]);
+
+  useEffect(() => {
+    if (!allowQuestionScopedRevision && !allowFullDocumentRevision) {
+      if (isAiComposerOpen) setIsAiComposerOpen(false);
+      return;
+    }
+    if (revisionScope === "selected_question" && !allowQuestionScopedRevision) {
+      setRevisionScope("whole_document");
+      return;
+    }
+    if (revisionScope === "whole_document" && !allowFullDocumentRevision) {
+      setRevisionScope("selected_question");
+    }
+  }, [
+    allowFullDocumentRevision,
+    allowQuestionScopedRevision,
+    isAiComposerOpen,
+    revisionScope,
+  ]);
 
   const hasGlobalEvidenceWarning = useMemo(() => {
     if (!document) return false;
@@ -281,6 +336,10 @@ export function ReviewV2Shell({
     }
   }
   async function handleUseExamples() {
+    if (!canUseExampleQuestions) {
+      setError("Example questions are disabled for this workspace.");
+      return;
+    }
     setLoading(true);
     setError(null);
     setNotice(null);
@@ -454,6 +513,8 @@ export function ReviewV2Shell({
   }
 
   function handleRevisionScopeChange(scope: RevisionScope) {
+    if (scope === "selected_question" && !allowQuestionScopedRevision) return;
+    if (scope === "whole_document" && !allowFullDocumentRevision) return;
     setRevisionScope(scope);
     if (scope === "selected_question" && !revisionQuestionId) {
       setRevisionQuestionId(focusedQuestionId ?? questions[0]?.id ?? null);
@@ -462,9 +523,13 @@ export function ReviewV2Shell({
 
   async function handleAskAI() {
     if (!document || !selectedVersion) return;
+    if (!canSuggestChanges) {
+      setError("Revision workflow is disabled for this workspace.");
+      return;
+    }
     const trimmed = aiInstruction.trim();
     if (!trimmed) {
-      setError("Describe changes before submitting.");
+      setError(workspaceSettings.revisionWording.emptyFeedbackError);
       return;
     }
     const scopedQuestionId =
@@ -585,18 +650,20 @@ export function ReviewV2Shell({
   return (
     <main className={styles.page}>
       <WorkspaceHeader
-        companyName={reviewWorkspaceBranding.companyName}
-        logoSrc={reviewWorkspaceBranding.logoSrc}
-        workspaceTitle={reviewWorkspaceBranding.workspaceTitle}
-        workspaceSubtitle={reviewWorkspaceBranding.workspaceSubtitle}
+        companyName={workspaceBranding.companyName}
+        logoSrc={workspaceBranding.logoSrc}
+        workspaceTitle={workspaceBranding.workspaceTitle}
+        workspaceSubtitle={workspaceBranding.workspaceSubtitle}
         onLogout={onLogout}
         isLoggingOut={isLoggingOut}
       />
       <DocumentMetaPanel
         document={document}
-        title={reviewWorkspaceBranding.startTitle}
-        subtitle={reviewWorkspaceBranding.startSubtitle}
+        title={workspaceBranding.startTitle}
+        subtitle={workspaceBranding.startSubtitle}
         loading={loading}
+        showExampleQuestions={canUseExampleQuestions}
+        showSourceFilename={workspaceSettings.uiFlags.showSourceFilename}
         onUpload={() => setIsUploadModalOpen(true)}
         onUseExamples={handleUseExamples}
       />
@@ -657,6 +724,10 @@ export function ReviewV2Shell({
                 revisionScope={revisionScope}
                 revisionQuestionId={revisionQuestionId}
                 onToggleComposer={() => {
+                  if (!canSuggestChanges) {
+                    setError("Revision workflow is disabled for this workspace.");
+                    return;
+                  }
                   setIsAiComposerOpen((value) => !value);
                   if (!revisionQuestionId) {
                     setRevisionQuestionId(focusedQuestionId ?? questions[0]?.id ?? null);
@@ -673,6 +744,13 @@ export function ReviewV2Shell({
                 onSectionFocus={setFocusedQuestionId}
                 onSaveVersion={handleSaveVersion}
                 onApprove={handleApproveVersion}
+                canSuggestChanges={canSuggestChanges}
+                allowQuestionScopedRevision={allowQuestionScopedRevision}
+                allowFullDocumentRevision={allowFullDocumentRevision}
+                revisionSubmitButtonLabel={workspaceSettings.revisionWording.submitButtonLabel}
+                revisionHelperText={workspaceSettings.revisionWording.revisionHelperText}
+                approveButtonLabel={workspaceSettings.approvalWording.approveButtonLabel}
+                approveHelperText={workspaceSettings.approvalWording.approveHelperText}
                 onToggleCompare={handleToggleComparePanel}
                 onCompare={handleCompareVersions}
                 onCompareLeftChange={setCompareLeftVersionId}
@@ -690,6 +768,7 @@ export function ReviewV2Shell({
         onUploadFile={handleUploadFile}
         helperText={uploadHelperText}
         errorText={uploadErrorText}
+        showExampleQuestions={canUseExampleQuestions}
       />
     </main>
   );

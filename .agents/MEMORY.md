@@ -49,6 +49,13 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - Response-document generation/revision must read post-run `RFPSession` snapshots using a fresh `AsyncSessionLocal` to avoid stale request-scoped identity-map state when LangGraph updates sessions concurrently.
 - Generation SSE `stage_update` events now include `question_completed`, `question_id`, `content_markdown`, and `evidence_refs` metadata so the review-v2 generating view can populate each answer field and supporting sources immediately after each question completes.
 - Web workspace UI now lives under `src/components/workspace`, `/` is the primary response workspace route, and `/review-v2` redirects to `/` for backward compatibility.
+- Client deployment overrides now use repo-root `config/` (client/branding/workspace/retrieval JSON, `documents/sample-questions.md`, and optional prompt overrides under `config/prompts/*`) with a seeded Gresham House configuration.
+- API prompt loading now resolves `config/prompts/<prompt>/<system|user>.md` first and falls back to `apps/api/app/prompts/<prompt>/<system|user>.md`; JSON client config loaders live in `app/core/client_config.py`.
+- Frontend workspace branding now loads from API endpoint `/api/client-config/workspace` (client/branding/workspace payload) with env/default fallback in the web app.
+- Frontend review-v2 workspace now applies `workspace.json` `ui_flags` and wording from `/api/client-config/workspace` (example-question visibility, source filename visibility, revision scope availability, revision submit/validation copy, and approval button/helper copy).
+- Seed corpus markdown files now live under `config/documents/data`; `apps/api/scripts/seed_data.py` ingests from that directory (not `data/docs`).
+- Docker Compose now mounts repo `./config` into API/worker containers at `/app/config` so client branding/workspace/prompt/document overrides load correctly in containerized runs.
+- LangGraph checkpointer tables/indexes are initialized once during API startup; workflow runs no longer call checkpointer setup per request.
 
 ## Example update
 

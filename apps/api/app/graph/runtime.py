@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -23,6 +24,8 @@ from app.services.observability import (
 logger = logging.getLogger(__name__)
 
 GRAPH_NAME = "respondai_rfp_workflow"
+_CHECKPOINTER_READY = False
+_CHECKPOINTER_SETUP_LOCK = asyncio.Lock()
 
 
 def _build_graph(checkpointer):
@@ -37,10 +40,29 @@ def _checkpointer_conn_string() -> str:
     return settings.database_url.replace("+psycopg", "")
 
 
+async def ensure_checkpointer_ready() -> None:
+    """Initialize LangGraph checkpoint tables once per API process."""
+
+    global _CHECKPOINTER_READY
+
+    if _CHECKPOINTER_READY:
+        return
+
+    async with _CHECKPOINTER_SETUP_LOCK:
+        if _CHECKPOINTER_READY:
+            return
+        logger.info("Initializing LangGraph checkpointer schema")
+        async with AsyncPostgresSaver.from_conn_string(_checkpointer_conn_string()) as checkpointer:
+            await checkpointer.setup()
+        _CHECKPOINTER_READY = True
+        logger.info("LangGraph checkpointer schema ready")
+
+
 async def run_until_human_review(payload: dict, thread_id: str) -> dict:
     """Run workflow from start until the human-review interrupt is reached."""
 
     logger.info("Running workflow to review pause thread_id=%s", thread_id)
+    await ensure_checkpointer_ready()
     graph_run_id = await create_graph_run(
         graph_name=GRAPH_NAME,
         thread_id=thread_id,
@@ -59,7 +81,6 @@ async def run_until_human_review(payload: dict, thread_id: str) -> dict:
 
     try:
         async with AsyncPostgresSaver.from_conn_string(_checkpointer_conn_string()) as checkpointer:
-            await checkpointer.setup()
             graph = _build_graph(checkpointer)
             result = await graph.ainvoke(payload, config={"configurable": {"thread_id": thread_id}})
             logger.info("Workflow run completed to review pause thread_id=%s", thread_id)
@@ -92,6 +113,7 @@ async def resume_from_review(thread_id: str, review_payload: dict) -> dict:
     """Resume a previously interrupted workflow with human feedback."""
 
     logger.info("Resuming workflow from review thread_id=%s", thread_id)
+    await ensure_checkpointer_ready()
     graph_run_id = await create_graph_run(
         graph_name=GRAPH_NAME,
         thread_id=thread_id,
@@ -110,7 +132,6 @@ async def resume_from_review(thread_id: str, review_payload: dict) -> dict:
 
     try:
         async with AsyncPostgresSaver.from_conn_string(_checkpointer_conn_string()) as checkpointer:
-            await checkpointer.setup()
             graph = _build_graph(checkpointer)
             result = await graph.ainvoke(
                 Command(resume=review_payload),
