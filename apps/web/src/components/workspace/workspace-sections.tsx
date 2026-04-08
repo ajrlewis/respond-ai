@@ -244,6 +244,7 @@ type AIComposerProps = {
   instruction: string;
   askingAi: boolean;
   loading: boolean;
+  mode?: "default" | "overlay";
   scope: "selected_question" | "whole_document";
   questions: Array<{ id: string; label: string }>;
   selectedQuestionId: string | null;
@@ -258,6 +259,7 @@ export function AIComposer({
   instruction,
   askingAi,
   loading,
+  mode = "default",
   scope,
   questions,
   selectedQuestionId,
@@ -268,8 +270,10 @@ export function AIComposer({
   onCancel,
 }: AIComposerProps) {
   const hasQuestions = questions.length > 0;
+  const composerClassName =
+    mode === "overlay" ? `${styles.aiComposer} ${styles.aiComposerOverlay}` : styles.aiComposer;
   return (
-    <section className={styles.aiComposer}>
+    <section className={composerClassName}>
       <p className={styles.sectionLabel}>Suggest changes</p>
       <label htmlFor="revision-scope" className={styles.fieldLabel}>
         Scope

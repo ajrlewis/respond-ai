@@ -280,11 +280,19 @@
 .revisionToggleRow {
   max-width: 1360px;
   margin: var(--space-8) auto 0;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-start;
   flex-wrap: wrap;
   gap: var(--space-12);
+}
+.revisionComposerOverlay {
+  position: absolute;
+  top: calc(100% + var(--space-8));
+  left: 0;
+  width: min(760px, 100%);
+  z-index: 20;
 }
 .finalTag {
   margin: 0;
@@ -313,6 +321,11 @@
   padding: var(--space-16);
   display: grid;
   gap: var(--space-8);
+}
+.aiComposerOverlay {
+  margin: 0;
+  max-width: none;
+  box-shadow: 0 14px 30px rgba(19, 36, 51, 0.14);
 }
 .fieldLabel {
   margin: var(--space-8) 0 0; color: var(--text-faint); font-size: 0.74rem;
@@ -387,13 +400,19 @@
 }
 .showSourcesButton {
   justify-self: start;
-  min-height: 30px !important;
-  border: 1px solid var(--stroke) !important;
-  border-radius: var(--radius-sm) !important;
-  background: #f8fbff !important;
-  color: #2e4e67 !important;
-  font-size: 0.78rem;
-  padding: 0 10px !important;
+  min-height: 26px !important;
+  border: 1px solid #d7e1ec !important;
+  border-radius: 999px !important;
+  background: #f8fbfd !important;
+  color: #4b647a !important;
+  font-size: 0.74rem;
+  font-weight: 560;
+  padding: 0 9px !important;
+}
+.showSourcesButton:hover {
+  border-color: #c5d3e2 !important;
+  background: #f0f5fa !important;
+  color: #365068 !important;
 }
 .supportingSourcesPanel {
   display: grid;
@@ -442,7 +461,7 @@
   white-space: pre-wrap;
 }
 .reviewActions {
-  max-width: 1360px; margin: var(--space-12) auto 0; display: flex;
+  max-width: 1360px; margin: var(--space-16) auto 0; display: flex;
   align-items: center; justify-content: flex-start; gap: var(--space-12);
 }
 .reviewActionsPrimary {
@@ -659,6 +678,10 @@
     padding: var(--space-16);
   }
   .brandBar, .documentHeader, .revisionToggleRow, .reviewActions, .compareHeader, .processingStrip { flex-direction: column; align-items: flex-start; }
+  .revisionComposerOverlay {
+    position: static;
+    width: 100%;
+  }
   .actionRow,
   .secondaryActions,
   .compareSelectors,
