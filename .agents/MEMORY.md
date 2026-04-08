@@ -51,6 +51,7 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - Web workspace UI now lives under `src/components/workspace`, `/` is the primary response workspace route, and `/review-v2` redirects to `/` for backward compatibility.
 - Client deployment overrides now use repo-root `config/` (client/branding/workspace/retrieval JSON, `documents/sample-questions.md`, and optional prompt overrides under `config/prompts/*`) with a seeded Gresham House configuration.
 - API prompt loading now resolves `config/prompts/<prompt>/<system|user>.md` first and falls back to `apps/api/app/prompts/<prompt>/<system|user>.md`; JSON client config loaders live in `app/core/client_config.py`.
+- Frontend workspace branding now loads from API endpoint `/api/client-config/workspace` (client/branding/workspace payload) with env/default fallback in the web app.
 
 ## Example update
 

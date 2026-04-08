@@ -24,7 +24,11 @@ import {
   updateStagesFromServer,
   type Stage,
 } from "@/components/workspace/shell-helpers";
-import { reviewWorkspaceBranding } from "@/config/review-workspace";
+import {
+  applyReviewWorkspaceBrandingOverride,
+  reviewWorkspaceBranding,
+  type ReviewWorkspaceBranding,
+} from "@/config/review-workspace";
 import {
   aiReviseResponseDocument,
   approveResponseDocumentVersion,
@@ -33,6 +37,7 @@ import {
   createSampleResponseDocument,
   deleteResponseDocumentVersion,
   fetchResponseDocument,
+  fetchWorkspaceClientConfig,
   generateResponseDocument,
   openResponseDocumentEventsStream,
   saveResponseDocumentVersion,
@@ -73,6 +78,7 @@ export function ReviewV2Shell({
   isLoggingOut = false,
   onLogout,
 }: ReviewV2ShellProps) {
+  const [workspaceBranding, setWorkspaceBranding] = useState<ReviewWorkspaceBranding>(reviewWorkspaceBranding);
   const [document, setDocument] = useState<ResponseDocument | null>(null);
   const [editableSections, setEditableSections] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -143,6 +149,27 @@ export function ReviewV2Shell({
     return () => {
       runEventsRef.current?.close();
       runEventsRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadWorkspaceConfig = async () => {
+      try {
+        const payload = await fetchWorkspaceClientConfig();
+        if (cancelled || !payload?.branding) return;
+        setWorkspaceBranding((previous) =>
+          applyReviewWorkspaceBrandingOverride(previous, payload.branding),
+        );
+      } catch {
+        // Keep env/default workspace branding when client config endpoint is unavailable.
+      }
+    };
+
+    void loadWorkspaceConfig();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -585,17 +612,17 @@ export function ReviewV2Shell({
   return (
     <main className={styles.page}>
       <WorkspaceHeader
-        companyName={reviewWorkspaceBranding.companyName}
-        logoSrc={reviewWorkspaceBranding.logoSrc}
-        workspaceTitle={reviewWorkspaceBranding.workspaceTitle}
-        workspaceSubtitle={reviewWorkspaceBranding.workspaceSubtitle}
+        companyName={workspaceBranding.companyName}
+        logoSrc={workspaceBranding.logoSrc}
+        workspaceTitle={workspaceBranding.workspaceTitle}
+        workspaceSubtitle={workspaceBranding.workspaceSubtitle}
         onLogout={onLogout}
         isLoggingOut={isLoggingOut}
       />
       <DocumentMetaPanel
         document={document}
-        title={reviewWorkspaceBranding.startTitle}
-        subtitle={reviewWorkspaceBranding.startSubtitle}
+        title={workspaceBranding.startTitle}
+        subtitle={workspaceBranding.startSubtitle}
         loading={loading}
         onUpload={() => setIsUploadModalOpen(true)}
         onUseExamples={handleUseExamples}

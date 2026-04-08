@@ -12,6 +12,7 @@ from app.core.logging import configure_logging
 from app.db.migration_check import assert_schema_current_async
 from app.routes.ask import router as ask_router
 from app.routes.auth import router as auth_router
+from app.routes.client_config import router as client_config_router
 from app.routes.documents import router as documents_router
 from app.routes.evals import router as evals_router
 from app.routes.health import router as health_router
@@ -65,6 +66,7 @@ def create_app(*, register_startup: bool = True) -> FastAPI:
 
     application.include_router(health_router)
     application.include_router(auth_router)
+    application.include_router(client_config_router)
     application.include_router(ask_router)
     application.include_router(review_router)
     application.include_router(documents_router)
