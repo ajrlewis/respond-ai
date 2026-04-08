@@ -206,6 +206,10 @@
   color: var(--text-muted);
   font-size: 0.88rem;
 }
+.centerCardAction {
+  justify-self: start;
+  width: auto;
+}
 .versionRow {
   max-width: 1360px;
   margin: var(--space-16) auto 0;

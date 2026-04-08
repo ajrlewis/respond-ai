@@ -128,7 +128,12 @@ export function GenerateCard({ generating, loading, onGenerate }: GenerateCardPr
     <section className={styles.centerCard}>
       <h3>Generate a complete draft document</h3>
       <p>Generate answers for all loaded questions in one pass.</p>
-      <button type="button" onClick={onGenerate} disabled={loading || generating}>
+      <button
+        type="button"
+        className={styles.centerCardAction}
+        onClick={onGenerate}
+        disabled={loading || generating}
+      >
         {generating ? "Generating..." : "Generate draft"}
       </button>
     </section>
