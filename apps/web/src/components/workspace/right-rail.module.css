@@ -1,0 +1,238 @@
+.rightRail {
+  height: 100%;
+  overflow: auto;
+  padding: var(--space-16);
+  background: #ffffff;
+}
+
+.railTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-8);
+}
+
+.railTab,
+.railTabActive {
+  min-height: 34px !important;
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid var(--stroke) !important;
+  background: #f4f7fb !important;
+  color: #325066 !important;
+  padding: 0 8px !important;
+  font-size: 0.78rem;
+  font-weight: 620;
+}
+
+.railTabActive {
+  background: #e8eff8 !important;
+  color: #1f3d56 !important;
+  border-color: #9cb2ca !important;
+}
+
+.railSection {
+  margin-top: var(--space-16);
+}
+
+.railSection h3 {
+  margin: 0;
+  font-size: 0.96rem;
+  font-weight: 640;
+}
+
+.inlineHint {
+  margin-top: var(--space-8);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.evidenceCard {
+  margin-top: var(--space-12);
+  border: 1px solid #d6deea;
+  border-radius: var(--radius-md);
+  background: #fbfcff;
+  padding: var(--space-12);
+}
+
+.evidenceCardActive {
+  border-color: #2f8091;
+}
+
+.evidenceUsed {
+  background: #f4f9f7;
+}
+
+.evidenceUnused {
+  background: #fbfcff;
+}
+
+.evidenceExcluded {
+  background: #fff8f1;
+}
+
+.evidenceHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.evidenceHeader p {
+  margin: 0;
+  font-size: 0.84rem;
+  font-weight: 640;
+}
+
+.evidenceHeader span {
+  border: 1px solid #ccd8e5;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: #f1f5f9;
+  color: #4a6072;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.evidenceExcerpt {
+  margin: var(--space-8) 0 0;
+  color: #325067;
+  font-size: 0.82rem;
+}
+
+.evidenceMetaRow {
+  margin-top: var(--space-8);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.evidenceActions {
+  margin-top: var(--space-8);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+.ghostButton {
+  min-height: 30px !important;
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid var(--stroke) !important;
+  background: #f6f8fb !important;
+  color: #2d4860 !important;
+  font-size: 0.74rem;
+  font-weight: 610;
+}
+
+.gapCard {
+  margin-top: var(--space-12);
+  border: 1px solid #e1d2bf;
+  border-radius: var(--radius-md);
+  background: #fff5e9;
+  padding: var(--space-12);
+}
+
+.gapHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.gapHeaderRow span {
+  border: 1px solid #e3cfb5;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: #fbe9d3;
+  color: #7b4f24;
+  font-size: 0.68rem;
+}
+
+.gapCard p {
+  margin: var(--space-8) 0 0;
+  color: #6f4721;
+  font-size: 0.81rem;
+}
+
+.gapAcknowledgeRow {
+  margin-top: var(--space-12);
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-8);
+  color: #3f5a71;
+  font-size: 0.8rem;
+}
+
+.stageTimeline {
+  margin-top: var(--space-12);
+  display: grid;
+  gap: var(--space-8);
+}
+
+.stageRow {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: var(--space-12);
+  border: 1px solid #dbe3ec;
+  border-radius: var(--radius-sm);
+  background: #f9fbfd;
+  padding: var(--space-8) var(--space-12);
+}
+
+.stageDot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: #aebdca;
+}
+
+.stageStatusIdle .stageDot {
+  background: #aebdca;
+}
+
+.stageStatusRunning .stageDot {
+  background: #2a8b96;
+}
+
+.stageStatusDone .stageDot {
+  background: #2d8669;
+}
+
+.stageStatusWarning .stageDot {
+  background: #a56a24;
+}
+
+.stageStatusFailed .stageDot {
+  background: #b9544d;
+}
+
+.stageHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.stageHeaderRow p {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 640;
+}
+
+.stageState {
+  border: 1px solid #cfd9e4;
+  border-radius: 999px;
+  background: #edf2f7;
+  color: #4d6375;
+  padding: 1px 7px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.stageMeta {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}

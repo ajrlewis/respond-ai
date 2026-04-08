@@ -27,6 +27,7 @@ class WorkflowEvent:
     node_name: str | None = None
     status: str | None = None
     error: str | None = None
+    metadata: dict[str, Any] | None = None
     timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
@@ -84,6 +85,9 @@ class WorkflowEventBus:
     def _thread_channel(self, thread_id: str) -> str:
         return f"{self._channel_prefix}:thread:{thread_id}"
 
+    def _document_channel(self, document_id: str) -> str:
+        return f"{self._channel_prefix}:document:{document_id}"
+
     def _thread_session_key(self, thread_id: str) -> str:
         return f"{self._channel_prefix}:thread_session:{thread_id}"
 
@@ -99,6 +103,7 @@ class WorkflowEventBus:
                 "node_name": signal.node_name,
                 "status": signal.status,
                 "error": signal.error,
+                "metadata": signal.metadata,
                 "timestamp": signal.timestamp,
             },
             separators=(",", ":"),
@@ -128,6 +133,7 @@ class WorkflowEventBus:
             node_name=str(payload.get("node_name")) if payload.get("node_name") is not None else None,
             status=str(payload.get("status")) if payload.get("status") is not None else None,
             error=str(payload.get("error")) if payload.get("error") is not None else None,
+            metadata=payload.get("metadata") if isinstance(payload.get("metadata"), dict) else None,
             timestamp=str(payload.get("timestamp") or datetime.now(UTC).isoformat()),
         )
 
@@ -167,6 +173,17 @@ class WorkflowEventBus:
         finally:
             await subscription.close()
 
+    @asynccontextmanager
+    async def subscribe_document(self, document_id: str) -> AsyncIterator[RedisWorkflowSubscription]:
+        """Create a Redis pub/sub subscription for a response-document channel."""
+
+        subscription = RedisWorkflowSubscription(bus=self, channels=[self._document_channel(document_id)])
+        await subscription.__aenter__()
+        try:
+            yield subscription
+        finally:
+            await subscription.close()
+
     async def register_thread_session(self, *, thread_id: str, session_id: str) -> None:
         """Record thread-to-session mapping for cross-channel fanout."""
 
@@ -189,6 +206,7 @@ class WorkflowEventBus:
         node_name: str | None = None,
         status: str | None = None,
         error: str | None = None,
+        metadata: dict[str, Any] | None = None,
         event: str = "workflow_state",
         thread_id: str | None = None,
     ) -> None:
@@ -205,6 +223,7 @@ class WorkflowEventBus:
                 node_name=node_name,
                 status=status,
                 error=error,
+                metadata=metadata,
             )
             payload = self._serialize_event(signal)
 
@@ -225,6 +244,7 @@ class WorkflowEventBus:
         thread_id: str,
         reason: str,
         error: str | None = None,
+        metadata: dict[str, Any] | None = None,
         event: str = "workflow_state",
     ) -> None:
         """Publish event to thread channel and mapped session channel."""
@@ -234,6 +254,7 @@ class WorkflowEventBus:
                 reason=reason,
                 event=event,
                 error=error,
+                metadata=metadata,
             )
             payload = self._serialize_event(signal)
 
@@ -247,6 +268,35 @@ class WorkflowEventBus:
                 await redis_client.publish(channel, payload)
         except Exception as exc:  # pragma: no cover - defensive transport safety
             logger.warning("Failed to publish thread workflow event thread_id=%s: %s", thread_id, exc)
+
+    async def publish_document(
+        self,
+        *,
+        document_id: str,
+        reason: str,
+        node_name: str | None = None,
+        status: str | None = None,
+        error: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        event: str = "workflow_state",
+    ) -> None:
+        """Publish event to response-document channel."""
+
+        try:
+            signal = WorkflowEvent(
+                reason=reason,
+                event=event,
+                node_name=node_name,
+                status=status,
+                error=error,
+                metadata=metadata,
+            )
+            payload = self._serialize_event(signal)
+
+            redis_client = get_redis_client()
+            await redis_client.publish(self._document_channel(document_id), payload)
+        except Exception as exc:  # pragma: no cover - defensive transport safety
+            logger.warning("Failed to publish document workflow event document_id=%s: %s", document_id, exc)
 
     async def session_subscriber_count(self, session_id: str) -> int:
         """Return local process subscriber count for a session channel."""

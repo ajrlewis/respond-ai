@@ -12,8 +12,7 @@ def format_evidence_blob(evidence: list[dict]) -> str:
 
     return "\n\n".join(
         (
-            f"[{idx + 1}] chunk_id={item.get('chunk_id', '')} "
-            f"{item.get('document_filename', 'unknown')}#chunk-{item.get('chunk_index', 'n/a')}\n"
+            f"[{idx + 1}] source={item.get('document_filename', 'unknown')}#chunk-{item.get('chunk_index', 'n/a')}\n"
             f"{item.get('text', '')}"
         )
         for idx, item in enumerate(evidence)

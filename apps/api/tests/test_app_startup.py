@@ -20,6 +20,15 @@ def test_main_app_imports_and_registers_core_routes() -> None:
     assert "/api/questions/{session_id}/drafts/{draft_id}" in route_paths
     assert "/api/questions/{session_id}/drafts/compare" in route_paths
     assert "/api/documents" in route_paths
+    assert "/api/response-documents" in route_paths
+    assert "/api/response-documents/sample" in route_paths
+    assert "/api/response-documents/{document_id}/events" in route_paths
+    assert "/api/response-documents/{document_id}/generate" in route_paths
+    assert "/api/response-documents/{document_id}/versions" in route_paths
+    assert "/api/response-documents/{document_id}/versions/{version_id}/approve" in route_paths
+    assert "/api/response-documents/{document_id}/versions/{version_id}" in route_paths
+    assert "/api/response-documents/{document_id}/compare" in route_paths
+    assert "/api/response-documents/{document_id}/ai-revise" in route_paths
     assert "/api/evals/run" in route_paths
     assert "/api/evals/runs" in route_paths
     assert "/api/evals/runs/{run_id}" in route_paths

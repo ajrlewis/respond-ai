@@ -9,6 +9,7 @@ from typing import Literal
 from app.ai import AIConfigurationError, AIProviderError, get_chat_model, get_structured_model
 from app.ai.schemas import DraftMetadataResult, EvidenceEvaluationResult, EvidenceSynthesisResult, RetrievalPlanResult, RevisionIntentResult
 from app.prompts import get_tone_guidelines, load_system_prompt, render_prompt_template, render_user_prompt
+from app.services.citations import extract_answer_citations, normalize_answer_citations
 from app.services.confidence import (
     build_structured_confidence_payload,
     format_evidence_blob,
@@ -18,16 +19,31 @@ from app.services.confidence import (
 logger = logging.getLogger(__name__)
 
 
-def _extract_citations(answer_text: str) -> list[str]:
-    citations = re.findall(r"\[[^\]]+#chunk-\d+\]", answer_text)
-    ordered: list[str] = []
-    seen: set[str] = set()
-    for citation in citations:
-        token = citation.strip()
-        if token and token not in seen:
-            ordered.append(token)
-            seen.add(token)
-    return ordered
+_SINGLE_PARAGRAPH_PATTERNS = (
+    "single paragraph",
+    "one paragraph",
+    "single-paragraph",
+    "one-paragraph",
+)
+
+
+def _requests_single_paragraph(reviewer_feedback: str) -> bool:
+    feedback = (reviewer_feedback or "").strip().lower()
+    if not feedback:
+        return False
+    return any(pattern in feedback for pattern in _SINGLE_PARAGRAPH_PATTERNS)
+
+
+def apply_revision_format_constraints(text: str, reviewer_feedback: str) -> str:
+    """Apply deterministic formatting constraints inferred from reviewer feedback."""
+
+    if not _requests_single_paragraph(reviewer_feedback):
+        return text
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return text.strip()
+    collapsed = " ".join(lines)
+    return re.sub(r"\s+", " ", collapsed).strip()
 
 
 async def extract_draft_metadata(
@@ -69,7 +85,7 @@ async def extract_draft_metadata(
         missing_notes.append("Answer indicates potentially missing evidence coverage.")
 
     return DraftMetadataResult(
-        citations_used=_extract_citations(draft_answer),
+        citations_used=extract_answer_citations(draft_answer),
         coverage_notes="Fallback metadata extraction was used.",
         confidence_notes="Structured metadata extraction was unavailable; reviewer should verify citations and tone.",
         missing_info_notes=missing_notes,
@@ -190,7 +206,7 @@ async def draft_answer(
                 evidence=evidence_blob,
             ),
         )
-        draft_text = draft_text.strip()
+        draft_text = normalize_answer_citations(draft_text.strip(), evidence)
         metadata = await extract_draft_metadata(
             question=question,
             question_type=question_type,
@@ -207,10 +223,7 @@ async def draft_answer(
         return draft_text, render_confidence_notes(confidence_payload), confidence_payload, metadata.model_dump()
     except (AIConfigurationError, AIProviderError, RuntimeError, TimeoutError) as exc:
         logger.warning("Draft answer model unavailable; using deterministic fallback error=%s", exc)
-        citations = ", ".join(
-            f"[{item.get('document_filename', 'unknown')}#chunk-{item.get('chunk_index', 'n/a')}]"
-            for item in evidence[:4]
-        )
+        citations = ", ".join(f"[{idx + 1}]" for idx in range(min(4, len(evidence))))
         fallback = (
             "Our renewable and sustainable investing approach focuses on contracted cash-flow assets, "
             "disciplined risk controls, and active asset management across solar and storage platforms. "
@@ -219,7 +232,7 @@ async def draft_answer(
             f"Key evidence: {citations}."
         )
         metadata = DraftMetadataResult(
-            citations_used=_extract_citations(fallback),
+            citations_used=extract_answer_citations(fallback),
             coverage_notes="Fallback deterministic draft was used.",
             confidence_notes="Draft generated without live model inference.",
             missing_info_notes=[],
@@ -290,7 +303,8 @@ async def revise_answer(
                 evidence=evidence_blob,
             ),
         )
-        revised_text = revised_text.strip()
+        revised_text = normalize_answer_citations(revised_text.strip(), evidence)
+        revised_text = apply_revision_format_constraints(revised_text, reviewer_feedback)
         metadata = await extract_draft_metadata(
             question=question,
             question_type=question_type,
@@ -315,8 +329,10 @@ async def revise_answer(
             f"{prior_draft}\n\nReviewer-requested revision integrated: "
             f"{reviewer_feedback.strip() or 'No additional comments provided.'}"
         )
+        revised_text = normalize_answer_citations(revised_text, evidence)
+        revised_text = apply_revision_format_constraints(revised_text, reviewer_feedback)
         metadata = DraftMetadataResult(
-            citations_used=_extract_citations(revised_text),
+            citations_used=extract_answer_citations(revised_text),
             coverage_notes="Fallback deterministic revision was used.",
             confidence_notes="Revision generated without live model inference.",
             missing_info_notes=[],
@@ -345,6 +361,7 @@ async def polish_answer(
     tone: str,
     draft_answer: str,
     evidence: list[dict],
+    reviewer_feedback: str = "",
 ) -> str:
     """Polish tone with constrained edits while preserving citations."""
 
@@ -367,11 +384,15 @@ async def polish_answer(
                 question=question,
                 draft_answer=stripped,
                 evidence=evidence_blob,
+                reviewer_feedback=reviewer_feedback or "None",
             ),
             temperature=0,
         )
         polished = output.strip()
-        return polished or stripped
+        if not polished:
+            return stripped
+        polished = normalize_answer_citations(polished, evidence)
+        return apply_revision_format_constraints(polished, reviewer_feedback)
     except (AIConfigurationError, AIProviderError, RuntimeError, TimeoutError) as exc:
         logger.warning("Tone polish model unavailable; returning unmodified draft error=%s", exc)
-        return stripped
+        return apply_revision_format_constraints(stripped, reviewer_feedback)

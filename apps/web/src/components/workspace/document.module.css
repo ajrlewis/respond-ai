@@ -1,0 +1,207 @@
+.documentCanvas {
+  max-width: 1320px;
+  margin: var(--space-16) auto 0;
+  background: #ffffff;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-lg);
+  padding: var(--space-24);
+}
+
+.documentHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-16);
+}
+
+.documentLabel {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.documentHeader h2 {
+  margin: 4px 0 0;
+  font-size: 1.08rem;
+  font-weight: 640;
+}
+
+.documentMeta {
+  margin: var(--space-8) 0 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.statusChip {
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+  background: #f3f6fa;
+  color: #2f495f;
+  font-size: 0.76rem;
+  font-weight: 610;
+  padding: 4px 10px;
+}
+
+.errorBanner {
+  margin-top: var(--space-12);
+  border: 1px solid #e4bfb9;
+  border-radius: var(--radius-sm);
+  background: #fff1ee;
+  color: #b44a3f;
+  padding: 10px 12px;
+  font-size: 0.84rem;
+}
+
+.emptyState {
+  margin-top: var(--space-16);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.documentBody {
+  margin-top: var(--space-16);
+}
+
+.documentEditor {
+  width: 100%;
+  min-height: 480px;
+  border: 1px solid #d3dce8;
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  color: #173043;
+  padding: var(--space-24);
+  font-size: 1.02rem;
+  line-height: 1.72;
+  resize: vertical;
+}
+
+.readOnlyText {
+  min-height: 480px;
+  border: 1px solid #e0e6ef;
+  border-radius: var(--radius-md);
+  background: #fbfcfe;
+  padding: var(--space-24);
+  font-size: 1.02rem;
+  line-height: 1.72;
+  white-space: pre-wrap;
+}
+
+.inlineCitation {
+  min-height: 0 !important;
+  border: 1px solid #bed0dd !important;
+  border-radius: 6px !important;
+  background: #eef5fb !important;
+  color: #29465a !important;
+  padding: 1px 7px !important;
+  font-size: 0.84em;
+}
+
+.inlineCitationActive {
+  border-color: #2a8b95 !important;
+  background: #e2f3f6 !important;
+  color: #0d5d66 !important;
+}
+
+.citationRow {
+  margin-top: var(--space-12);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+.citationLabel {
+  width: 100%;
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.citationButton,
+.citationButtonActive {
+  min-height: 28px !important;
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid #bed0dd !important;
+  background: #eef5fb !important;
+  color: #29465a !important;
+  padding: 0 10px !important;
+  font-size: 0.76rem;
+  font-weight: 610;
+}
+
+.citationButtonActive {
+  border-color: #2a8b95 !important;
+  background: #e2f3f6 !important;
+  color: #0d5d66 !important;
+}
+
+.editorHint {
+  margin: var(--space-12) 0 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.revisionComposer {
+  margin-top: var(--space-16);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-md);
+  background: #f7f9fc;
+  padding: var(--space-12);
+}
+
+.revisionLabel {
+  display: block;
+  margin: 0;
+  color: #334f66;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.revisionComposer textarea {
+  width: 100%;
+  margin-top: var(--space-8);
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: #1c3449;
+  padding: 10px;
+}
+
+.revisionActions {
+  margin-top: var(--space-8);
+  display: flex;
+  gap: var(--space-8);
+}
+
+.secondaryButton {
+  background: #ffffff !important;
+  color: #23405a !important;
+  border-color: var(--stroke-strong) !important;
+}
+
+.revisionMeta {
+  margin: var(--space-8) 0 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 760px) {
+  .documentCanvas {
+    padding: var(--space-16);
+  }
+
+  .documentEditor,
+  .readOnlyText {
+    min-height: 360px;
+    padding: var(--space-16);
+    font-size: 0.98rem;
+  }
+
+  .documentHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

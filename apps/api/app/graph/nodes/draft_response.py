@@ -103,6 +103,7 @@ async def polish_response_node(nodes, state: WorkflowState) -> WorkflowState:
             tone=state.get("tone", "formal"),
             draft_answer=draft_text,
             evidence=active_evidence(evidence_for_snapshot),
+            reviewer_feedback=state.get("review_comments", "") if state.get("draft_origin") == "revision" else "",
         )
         stage: Literal["draft", "revision"] = "revision" if state.get("draft_origin") == "revision" else "draft"
         logger.info(
