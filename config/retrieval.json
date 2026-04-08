@@ -1,0 +1,32 @@
+{
+  "retrieval_thresholds": {
+    "base_top_k": 10,
+    "min_top_k": 4,
+    "max_top_k": 24,
+    "final_evidence_k": 6,
+    "keyword_variants_per_query": 3,
+    "context_expand_seed_count": 3,
+    "context_expand_window": 1
+  },
+  "chunking": {
+    "max_chars": 900,
+    "overlap_chars": 120
+  },
+  "confidence_rules": {
+    "strong_min_confidence": 0.82,
+    "partial_min_confidence": 0.6,
+    "weak_max_confidence": 0.36,
+    "recommended_actions": [
+      "proceed",
+      "proceed_with_caveats",
+      "retrieve_more"
+    ]
+  },
+  "evidence_requirements": {
+    "citations_required": true,
+    "minimum_supporting_chunks": 2,
+    "report_missing_information": true,
+    "flag_contradictions": true,
+    "avoid_unsupported_performance_claims": true
+  }
+}

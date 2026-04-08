@@ -1,0 +1,27 @@
+{
+  "labels": {
+    "company": "Gresham House",
+    "workspace": "Response Workspace",
+    "document": "Response Document",
+    "question": "Question",
+    "draft": "Draft",
+    "evidence": "Evidence",
+    "revision": "Revision"
+  },
+  "ui_flags": {
+    "show_example_questions": true,
+    "show_source_filename": true,
+    "show_confidence_notes": true,
+    "allow_question_scoped_revision": true,
+    "allow_full_document_revision": true
+  },
+  "approval_wording": {
+    "approve_button_label": "Approve Version",
+    "approve_helper_text": "Confirm this version is complete, evidence-grounded, and ready for final use."
+  },
+  "revision_wording": {
+    "submit_button_label": "Request Revision",
+    "revision_helper_text": "Describe specific edits and keep requests aligned to available evidence.",
+    "empty_feedback_error": "Add revision feedback or exclude a citation chunk before submitting."
+  }
+}

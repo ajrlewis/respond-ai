@@ -1,0 +1,16 @@
+{
+  "client_id": "gresham-house",
+  "display_name": "Gresham House",
+  "legal_name": "Gresham House plc",
+  "environment_label": "production",
+  "website": "https://greshamhouse.com/",
+  "enabled_features": [
+    "response_documents",
+    "review_workspace_v2",
+    "draft_generation",
+    "revision_workflow",
+    "evidence_evaluation",
+    "sse_stage_updates",
+    "example_questions"
+  ]
+}
