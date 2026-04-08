@@ -183,7 +183,7 @@ export function ReviewV2EditingView({
           onClick={onToggleActivity}
           disabled={!hasRunHistory}
         >
-          {inspectionPanel === "activity" ? "Hide activity" : "View activity"}
+          View activity
         </button>
         <button
           type="button"

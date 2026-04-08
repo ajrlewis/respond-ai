@@ -182,11 +182,12 @@ describe("EditorSurface", () => {
 });
 
 describe("ProcessingStatusStrip", () => {
-  it("shows active stage while processing", () => {
+  it("shows active stage as a single scoped line while processing", () => {
     render(
       <ProcessingStatusStrip
         title="Applying revision"
         isRunning
+        scopeLabel="Question 1 of 1"
         stages={[
           { label: "Analyze revision request", status: "done" },
           { label: "Revise draft text", status: "running" },
@@ -196,12 +197,45 @@ describe("ProcessingStatusStrip", () => {
     );
 
     expect(screen.getByText("Applying revision")).toBeInTheDocument();
-    expect(screen.getByText("Revise draft text")).toBeInTheDocument();
+    expect(screen.getByText("Question 1 of 1: Revise draft text")).toBeInTheDocument();
     expect(screen.getByText("In progress")).toBeInTheDocument();
   });
 });
 
 describe("StageCard", () => {
+  it("does not render a default stage label before the first stage update", () => {
+    render(
+      <StageCard
+        title="Generating draft"
+        scopeLabel="Question 1 of 3"
+        stages={[
+          { label: "Plan approach", status: "idle" },
+          { label: "Retrieve supporting material", status: "idle" },
+          { label: "Rank evidence", status: "idle" },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText("Question 1 of 3: Plan approach")).not.toBeInTheDocument();
+    expect(screen.queryByText("Plan approach")).not.toBeInTheDocument();
+  });
+
+  it("shows running stage as a single scoped line", () => {
+    render(
+      <StageCard
+        title="Generating draft"
+        scopeLabel="Question 1 of 3"
+        stages={[
+          { label: "Retrieve supporting material", status: "done" },
+          { label: "Rank evidence", status: "done" },
+          { label: "Draft response sections", status: "running" },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Question 1 of 3: Draft response sections")).toBeInTheDocument();
+  });
+
   it("shows completion state when all stages are done", () => {
     const { container } = render(
       <StageCard

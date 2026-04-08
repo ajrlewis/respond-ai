@@ -453,9 +453,8 @@ export function ReviewV2Shell({
     await handleCompareVersions();
   }
 
-  function handleToggleActivityPanel() {
-    const nextPanel: InspectionPanel = inspectionPanel === "activity" ? null : "activity";
-    setInspectionPanel(nextPanel);
+  function handleViewActivityPanel() {
+    setInspectionPanel("activity");
   }
 
   function handleRevisionScopeChange(scope: RevisionScope) {
@@ -682,7 +681,7 @@ export function ReviewV2Shell({
                 onSectionFocus={setFocusedQuestionId}
                 onSaveVersion={handleSaveVersion}
                 onApprove={handleApproveVersion}
-                onToggleActivity={handleToggleActivityPanel}
+                onToggleActivity={handleViewActivityPanel}
                 onToggleCompare={handleToggleComparePanel}
                 onCompare={handleCompareVersions}
                 onCompareLeftChange={setCompareLeftVersionId}

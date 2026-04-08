@@ -192,7 +192,7 @@
   background: var(--surface);
   padding: var(--space-24);
   display: grid;
-  gap: var(--space-12);
+  gap: var(--space-8);
 }
 .centerCard h3,
 .comparePanel h3,
@@ -510,7 +510,7 @@
   gap: var(--space-8);
 }
 .stageTicker {
-  margin-top: var(--space-8);
+  margin-top: 2px;
   min-height: 24px;
   display: flex;
   align-items: center;

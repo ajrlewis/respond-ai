@@ -15,6 +15,11 @@ type Stage = {
   status: "idle" | "running" | "done";
 };
 
+type TaskTickerProps = {
+  label: string;
+  isRunning: boolean;
+};
+
 function stageStatusLabel(status: Stage["status"]): string {
   if (status === "running") return "Running";
   if (status === "done") return "Done";
@@ -22,11 +27,34 @@ function stageStatusLabel(status: Stage["status"]): string {
 }
 
 function activeStageLabel(stages: Stage[]): string {
+  const hasProgress = stages.some((stage) => stage.status !== "idle");
+  if (!hasProgress) return "";
   const running = stages.find((stage) => stage.status === "running");
   if (running) return running.label;
   const pending = stages.find((stage) => stage.status === "idle");
   if (pending) return pending.label;
   return "Processing complete";
+}
+
+function stageTickerLabel(stageLabel: string, scopeLabel?: string | null): string {
+  if (!stageLabel.trim()) return "";
+  if (!scopeLabel || stageLabel === "Processing complete") return stageLabel;
+  return `${scopeLabel}: ${stageLabel}`;
+}
+
+function TaskTicker({ label, isRunning }: TaskTickerProps) {
+  if (!label.trim()) return null;
+  return (
+    <div className={styles.stageTicker} aria-live="polite">
+      <p
+        key={`${label}-${isRunning ? "running" : "done"}`}
+        className={`${styles.stageTickerText} ${isRunning ? styles.stageTickerTextRunning : styles.stageTickerTextDone}`}
+        data-stage={label}
+      >
+        {label}
+      </p>
+    </div>
+  );
 }
 
 function toRelevanceLabel(score: number | null | undefined): string {
@@ -162,6 +190,7 @@ type StageCardProps = {
 
 export function StageCard({ title, stages, scopeLabel = null }: StageCardProps) {
   const currentStage = activeStageLabel(stages);
+  const tickerLabel = stageTickerLabel(currentStage, scopeLabel);
   const isComplete = stages.length > 0 && stages.every((stage) => stage.status === "done");
   return (
     <section className={styles.centerCard}>
@@ -169,17 +198,8 @@ export function StageCard({ title, stages, scopeLabel = null }: StageCardProps) 
         <span className={isComplete ? styles.processingDoneDot : styles.runSpinner} aria-hidden="true" />
         <div>
           <h3>{title}</h3>
-          {scopeLabel ? <p className={styles.questionMeta}>{scopeLabel}</p> : null}
+          <TaskTicker label={tickerLabel} isRunning={!isComplete} />
         </div>
-      </div>
-      <div className={styles.stageTicker} aria-live="polite">
-        <p
-          key={`${currentStage}-${isComplete ? "done" : "running"}`}
-          className={`${styles.stageTickerText} ${isComplete ? styles.stageTickerTextDone : styles.stageTickerTextRunning}`}
-          data-stage={currentStage}
-        >
-          {currentStage}
-        </p>
       </div>
     </section>
   );
@@ -198,8 +218,11 @@ export function ProcessingStatusStrip({
   isRunning,
   scopeLabel = null,
 }: ProcessingStatusStripProps) {
+  const currentStage = activeStageLabel(stages);
+  const runningLabel = stageTickerLabel(currentStage, scopeLabel);
+  const processingLabel = isRunning ? runningLabel : "Processing complete";
   return (
-    <section className={styles.processingStrip} aria-live="polite">
+    <section className={styles.processingStrip}>
       <div className={styles.processingStripLead}>
         <span
           className={isRunning ? styles.runSpinner : styles.processingDoneDot}
@@ -207,10 +230,7 @@ export function ProcessingStatusStrip({
         />
         <div>
           <p className={styles.processingStripTitle}>{title}</p>
-          {scopeLabel ? <p className={styles.questionMeta}>{scopeLabel}</p> : null}
-          <p className={styles.processingStripMeta}>
-            {isRunning ? activeStageLabel(stages) : "Processing complete"}
-          </p>
+          <TaskTicker label={processingLabel} isRunning={isRunning} />
         </div>
       </div>
       <p className={styles.processingStripState}>{isRunning ? "In progress" : "Completed"}</p>
