@@ -1,4 +1,9 @@
-import { applyReviewWorkspaceBrandingOverride, type ReviewWorkspaceBranding } from "@/config/review-workspace";
+import {
+  applyReviewWorkspaceBrandingOverride,
+  applyReviewWorkspaceSettingsOverride,
+  reviewWorkspaceSettings,
+  type ReviewWorkspaceBranding,
+} from "@/config/review-workspace";
 import { describe, expect, it } from "vitest";
 
 const BASE: ReviewWorkspaceBranding = {
@@ -40,5 +45,48 @@ describe("applyReviewWorkspaceBrandingOverride", () => {
     });
 
     expect(merged).toEqual(BASE);
+  });
+});
+
+describe("applyReviewWorkspaceSettingsOverride", () => {
+  it("maps ui flags and wording from workspace payload", () => {
+    const merged = applyReviewWorkspaceSettingsOverride(reviewWorkspaceSettings, {
+      ui_flags: {
+        show_example_questions: false,
+        show_source_filename: false,
+        allow_question_scoped_revision: false,
+        allow_full_document_revision: true,
+      },
+      approval_wording: {
+        approve_button_label: "Approve Version",
+        approve_helper_text: "Confirm this version is final.",
+      },
+      revision_wording: {
+        submit_button_label: "Request Revision",
+        revision_helper_text: "Describe precise, evidence-safe edits.",
+        empty_feedback_error: "Add revision feedback before submitting.",
+      },
+    });
+
+    expect(merged.uiFlags.showExampleQuestions).toBe(false);
+    expect(merged.uiFlags.showSourceFilename).toBe(false);
+    expect(merged.uiFlags.allowQuestionScopedRevision).toBe(false);
+    expect(merged.uiFlags.allowFullDocumentRevision).toBe(true);
+    expect(merged.approvalWording.approveButtonLabel).toBe("Approve Version");
+    expect(merged.revisionWording.submitButtonLabel).toBe("Request Revision");
+    expect(merged.revisionWording.emptyFeedbackError).toBe("Add revision feedback before submitting.");
+  });
+
+  it("keeps defaults for missing or invalid workspace keys", () => {
+    const merged = applyReviewWorkspaceSettingsOverride(reviewWorkspaceSettings, {
+      ui_flags: {
+        show_example_questions: "no",
+      },
+      revision_wording: {
+        submit_button_label: " ",
+      },
+    });
+
+    expect(merged).toEqual(reviewWorkspaceSettings);
   });
 });

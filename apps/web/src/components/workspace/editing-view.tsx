@@ -42,6 +42,13 @@ type ReviewV2EditingViewProps = {
   onSectionFocus: (questionId: string) => void;
   onSaveVersion: () => void;
   onApprove: () => void;
+  canSuggestChanges: boolean;
+  allowQuestionScopedRevision: boolean;
+  allowFullDocumentRevision: boolean;
+  revisionSubmitButtonLabel: string;
+  revisionHelperText: string;
+  approveButtonLabel: string;
+  approveHelperText: string;
   onToggleCompare: () => void;
   onCompare: () => void;
   onCompareLeftChange: (value: string) => void;
@@ -80,6 +87,13 @@ export function ReviewV2EditingView({
   onSectionFocus,
   onSaveVersion,
   onApprove,
+  canSuggestChanges,
+  allowQuestionScopedRevision,
+  allowFullDocumentRevision,
+  revisionSubmitButtonLabel,
+  revisionHelperText,
+  approveButtonLabel,
+  approveHelperText,
   onToggleCompare,
   onCompare,
   onCompareLeftChange,
@@ -105,7 +119,7 @@ export function ReviewV2EditingView({
           type="button"
           className={styles.secondaryButton}
           onClick={onToggleComposer}
-          disabled={isAskingAi || loading}
+          disabled={isAskingAi || loading || !canSuggestChanges}
         >
           {isAiComposerOpen ? "Hide suggestions" : "Suggest changes"}
         </button>
@@ -118,6 +132,10 @@ export function ReviewV2EditingView({
               loading={loading}
               mode="overlay"
               scope={revisionScope}
+              allowQuestionScope={allowQuestionScopedRevision}
+              allowWholeDocumentScope={allowFullDocumentRevision}
+              helperText={revisionHelperText}
+              submitButtonLabel={revisionSubmitButtonLabel}
               questions={document.questions.map((question) => ({
                 id: question.id,
                 label: question.extracted_text,
@@ -152,7 +170,7 @@ export function ReviewV2EditingView({
             onClick={onApprove}
             disabled={loading || isSavingVersion || isAskingAi || isApproving || hasUnsavedChanges}
           >
-            {isApproving ? "Approving..." : selectedVersion.is_final ? "Approved" : "Approve"}
+            {isApproving ? "Approving..." : selectedVersion.is_final ? "Approved" : approveButtonLabel}
           </button>
           <button
             type="button"
@@ -165,6 +183,9 @@ export function ReviewV2EditingView({
           {notice ? <p className={styles.inlineNotice}>{notice}</p> : null}
         </div>
       </section>
+      {!selectedVersion.is_final && approveHelperText ? (
+        <p className={styles.actionHint}>{approveHelperText}</p>
+      ) : null}
       {hasUnsavedChanges ? (
         <p className={styles.actionHint}>Save draft changes before approving.</p>
       ) : null}

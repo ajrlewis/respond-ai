@@ -9,6 +9,8 @@ type ReviewV2UploadModalProps = {
   onUploadFile: (file: File) => Promise<void>;
   helperText?: string | null;
   errorText?: string | null;
+  showExampleQuestions?: boolean;
+  exampleQuestionsButtonLabel?: string;
 };
 
 export function ReviewV2UploadModal({
@@ -18,6 +20,8 @@ export function ReviewV2UploadModal({
   onUploadFile,
   helperText,
   errorText,
+  showExampleQuestions = true,
+  exampleQuestionsButtonLabel = "Use example questions",
 }: ReviewV2UploadModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,7 +49,11 @@ export function ReviewV2UploadModal({
           </button>
         </div>
 
-        <p className={styles.helper}>Upload a source file or load default example questions.</p>
+        <p className={styles.helper}>
+          {showExampleQuestions
+            ? "Upload a source file or load default example questions."
+            : "Upload a source file to continue."}
+        </p>
 
         <label className={styles.fieldLabel} htmlFor="upload-document-input">
           Source file
@@ -69,9 +77,11 @@ export function ReviewV2UploadModal({
           >
             {isSubmitting ? "Loading..." : "Use uploaded file"}
           </button>
-          <button type="button" className={styles.secondaryButton} onClick={onUseExamples}>
-            Use example questions
-          </button>
+          {showExampleQuestions ? (
+            <button type="button" className={styles.secondaryButton} onClick={onUseExamples}>
+              {exampleQuestionsButtonLabel}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
