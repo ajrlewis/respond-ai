@@ -270,7 +270,7 @@ export function AIComposer({
   const hasQuestions = questions.length > 0;
   return (
     <section className={styles.aiComposer}>
-      <p className={styles.sectionLabel}>Request revision</p>
+      <p className={styles.sectionLabel}>Suggest changes</p>
       <label htmlFor="revision-scope" className={styles.fieldLabel}>
         Scope
       </label>
@@ -380,7 +380,7 @@ export function EditorSurface({
                 className={styles.showSourcesButton}
                 onClick={() => toggleSources(question.id)}
               >
-                {isExpanded ? "Hide supporting sources" : `Show supporting sources (${sources.length})`}
+                {isExpanded ? "Hide sources" : `Sources (${sources.length})`}
               </button>
               {isExpanded ? (
                 <div className={styles.supportingSourcesPanel}>
@@ -455,7 +455,7 @@ export function GeneratingDraftPreview({
                 className={styles.showSourcesButton}
                 onClick={() => toggleSources(question.id)}
               >
-                {isExpanded ? "Hide supporting sources" : `Show supporting sources (${sources.length})`}
+                {isExpanded ? "Hide sources" : `Sources (${sources.length})`}
               </button>
               {isExpanded ? (
                 <div className={styles.supportingSourcesPanel}>

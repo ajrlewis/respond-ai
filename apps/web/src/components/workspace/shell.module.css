@@ -1,9 +1,9 @@
 .page {
-  --space-8: 8px;
-  --space-12: 12px;
-  --space-16: 16px;
-  --space-24: 24px;
-  --space-32: 32px;
+  --space-8: 7px;
+  --space-12: 10px;
+  --space-16: 14px;
+  --space-24: 21px;
+  --space-32: 28px;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -279,10 +279,11 @@
 }
 .revisionToggleRow {
   max-width: 1360px;
-  margin: var(--space-12) auto 0;
+  margin: var(--space-8) auto 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  flex-wrap: wrap;
   gap: var(--space-12);
 }
 .finalTag {

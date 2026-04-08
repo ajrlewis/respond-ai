@@ -169,12 +169,12 @@ describe("EditorSurface", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Show supporting sources (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sources (1)" })).toBeInTheDocument();
     expect(screen.queryByText(/Prior RFP Answers/)).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Show supporting sources (1)" }));
+    await user.click(screen.getByRole("button", { name: "Sources (1)" }));
 
-    expect(screen.getByRole("button", { name: "Hide supporting sources" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide sources" })).toBeInTheDocument();
     expect(screen.getByText(/\[1\]/)).toBeInTheDocument();
     expect(screen.getByText(/High relevance/)).toBeInTheDocument();
     expect(screen.getByText(/Prior RFP Answers/)).toBeInTheDocument();
@@ -328,9 +328,9 @@ describe("GeneratingDraftPreview", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Show supporting sources (1)" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Show supporting sources (1)" }));
-    expect(screen.getByRole("button", { name: "Hide supporting sources" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sources (1)" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sources (1)" }));
+    expect(screen.getByRole("button", { name: "Hide sources" })).toBeInTheDocument();
     expect(screen.getByText(/Prior RFP Answers/)).toBeInTheDocument();
   });
 });

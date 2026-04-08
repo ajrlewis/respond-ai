@@ -107,7 +107,7 @@ export function ReviewV2EditingView({
           onClick={onToggleComposer}
           disabled={isAskingAi || loading}
         >
-          {isAiComposerOpen ? "Hide revision request" : "Request revision"}
+          {isAiComposerOpen ? "Hide suggestions" : "Suggest changes"}
         </button>
         {selectedVersion.is_final ? <p className={styles.finalTag}>Approved version</p> : null}
       </section>

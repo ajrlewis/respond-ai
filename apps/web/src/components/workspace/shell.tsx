@@ -626,7 +626,7 @@ export function ReviewV2Shell({
           ) : null}
           {screenState === "editing" && document && selectedVersion ? (
             <>
-              {hasRunHistory ? (
+              {hasRunHistory && isProcessing ? (
                 <ProcessingStatusStrip
                   title={runContent.title}
                   stages={stages}
