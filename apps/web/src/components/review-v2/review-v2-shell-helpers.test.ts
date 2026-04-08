@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  filterChangedRevisedSections,
   markAllStagesDone,
   syncSectionContentAndEvidence,
   updateStagesFromServer,
 } from "@/components/review-v2/review-v2-shell-helpers";
-import type { EvidenceItem } from "@/lib/api";
+import type { EvidenceItem, ResponseSaveSectionInput } from "@/lib/api";
 
 function evidenceItem(id: string): EvidenceItem {
   return {
@@ -97,5 +98,43 @@ describe("markAllStagesDone", () => {
       { label: "Retrieve supporting material", status: "done" },
       { label: "Rank evidence", status: "done" },
     ]);
+  });
+});
+
+describe("filterChangedRevisedSections", () => {
+  function revisedSection(questionId: string, content: string): ResponseSaveSectionInput {
+    return {
+      question_id: questionId,
+      content_markdown: content,
+      evidence_refs: [],
+      confidence_score: null,
+      coverage_score: null,
+    };
+  }
+
+  it("returns only sections whose content changed", () => {
+    const changed = filterChangedRevisedSections(
+      {
+        q1: "Original paragraph.",
+        q2: "Original second answer.",
+      },
+      [
+        revisedSection("q1", "Original paragraph."),
+        revisedSection("q2", "Updated second answer."),
+      ],
+    );
+
+    expect(changed.map((item) => item.question_id)).toEqual(["q2"]);
+  });
+
+  it("ignores whitespace-only differences", () => {
+    const changed = filterChangedRevisedSections(
+      {
+        q1: "Original paragraph.\n",
+      },
+      [revisedSection("q1", "  Original paragraph.  ")],
+    );
+
+    expect(changed).toEqual([]);
   });
 });

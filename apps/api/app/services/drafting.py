@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Literal
 
 from app.ai import AIConfigurationError, AIProviderError, get_chat_model, get_structured_model
@@ -16,6 +17,33 @@ from app.services.confidence import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+_SINGLE_PARAGRAPH_PATTERNS = (
+    "single paragraph",
+    "one paragraph",
+    "single-paragraph",
+    "one-paragraph",
+)
+
+
+def _requests_single_paragraph(reviewer_feedback: str) -> bool:
+    feedback = (reviewer_feedback or "").strip().lower()
+    if not feedback:
+        return False
+    return any(pattern in feedback for pattern in _SINGLE_PARAGRAPH_PATTERNS)
+
+
+def apply_revision_format_constraints(text: str, reviewer_feedback: str) -> str:
+    """Apply deterministic formatting constraints inferred from reviewer feedback."""
+
+    if not _requests_single_paragraph(reviewer_feedback):
+        return text
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return text.strip()
+    collapsed = " ".join(lines)
+    return re.sub(r"\s+", " ", collapsed).strip()
 
 
 async def extract_draft_metadata(
@@ -276,6 +304,7 @@ async def revise_answer(
             ),
         )
         revised_text = normalize_answer_citations(revised_text.strip(), evidence)
+        revised_text = apply_revision_format_constraints(revised_text, reviewer_feedback)
         metadata = await extract_draft_metadata(
             question=question,
             question_type=question_type,
@@ -301,6 +330,7 @@ async def revise_answer(
             f"{reviewer_feedback.strip() or 'No additional comments provided.'}"
         )
         revised_text = normalize_answer_citations(revised_text, evidence)
+        revised_text = apply_revision_format_constraints(revised_text, reviewer_feedback)
         metadata = DraftMetadataResult(
             citations_used=extract_answer_citations(revised_text),
             coverage_notes="Fallback deterministic revision was used.",
@@ -331,6 +361,7 @@ async def polish_answer(
     tone: str,
     draft_answer: str,
     evidence: list[dict],
+    reviewer_feedback: str = "",
 ) -> str:
     """Polish tone with constrained edits while preserving citations."""
 
@@ -353,13 +384,15 @@ async def polish_answer(
                 question=question,
                 draft_answer=stripped,
                 evidence=evidence_blob,
+                reviewer_feedback=reviewer_feedback or "None",
             ),
             temperature=0,
         )
         polished = output.strip()
         if not polished:
             return stripped
-        return normalize_answer_citations(polished, evidence)
+        polished = normalize_answer_citations(polished, evidence)
+        return apply_revision_format_constraints(polished, reviewer_feedback)
     except (AIConfigurationError, AIProviderError, RuntimeError, TimeoutError) as exc:
         logger.warning("Tone polish model unavailable; returning unmodified draft error=%s", exc)
-        return stripped
+        return apply_revision_format_constraints(stripped, reviewer_feedback)

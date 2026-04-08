@@ -9,6 +9,7 @@ import {
 import styles from "./review-v2-shell.module.css";
 
 type InspectionPanel = "compare" | "activity" | null;
+type RevisionScope = "selected_question" | "whole_document";
 
 type ReviewV2EditingViewProps = {
   document: ResponseDocument;
@@ -17,6 +18,8 @@ type ReviewV2EditingViewProps = {
   hasGlobalEvidenceWarning: boolean;
   isAiComposerOpen: boolean;
   aiInstruction: string;
+  revisionScope: RevisionScope;
+  revisionQuestionId: string | null;
   isAskingAi: boolean;
   isSavingVersion: boolean;
   isApproving: boolean;
@@ -36,9 +39,12 @@ type ReviewV2EditingViewProps = {
   onDeleteVersion: (version: ResponseDocument["versions"][number]) => void;
   onToggleComposer: () => void;
   onInstructionChange: (value: string) => void;
+  onRevisionScopeChange: (scope: RevisionScope) => void;
+  onRevisionQuestionChange: (questionId: string) => void;
   onSubmitRevision: () => void;
   onCancelRevision: () => void;
   onSectionChange: (questionId: string, value: string) => void;
+  onSectionFocus: (questionId: string) => void;
   onSaveVersion: () => void;
   onApprove: () => void;
   onToggleActivity: () => void;
@@ -55,6 +61,8 @@ export function ReviewV2EditingView({
   hasGlobalEvidenceWarning,
   isAiComposerOpen,
   aiInstruction,
+  revisionScope,
+  revisionQuestionId,
   isAskingAi,
   isSavingVersion,
   isApproving,
@@ -74,9 +82,12 @@ export function ReviewV2EditingView({
   onDeleteVersion,
   onToggleComposer,
   onInstructionChange,
+  onRevisionScopeChange,
+  onRevisionQuestionChange,
   onSubmitRevision,
   onCancelRevision,
   onSectionChange,
+  onSectionFocus,
   onSaveVersion,
   onApprove,
   onToggleActivity,
@@ -116,7 +127,15 @@ export function ReviewV2EditingView({
           instruction={aiInstruction}
           askingAi={isAskingAi}
           loading={loading}
+          scope={revisionScope}
+          questions={document.questions.map((question) => ({
+            id: question.id,
+            label: question.extracted_text,
+          }))}
+          selectedQuestionId={revisionQuestionId}
           onInstructionChange={onInstructionChange}
+          onScopeChange={onRevisionScopeChange}
+          onQuestionChange={onRevisionQuestionChange}
           onApply={onSubmitRevision}
           onCancel={onCancelRevision}
         />
@@ -132,6 +151,7 @@ export function ReviewV2EditingView({
             : null
         }
         onSectionChange={onSectionChange}
+        onSectionFocus={onSectionFocus}
       />
       <section className={styles.reviewActions}>
         <div className={styles.reviewActionsPrimary}>

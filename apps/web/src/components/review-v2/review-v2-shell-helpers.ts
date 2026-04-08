@@ -1,4 +1,4 @@
-import { type EvidenceItem, type ResponseDocument } from "@/lib/api";
+import { type EvidenceItem, type ResponseDocument, type ResponseSaveSectionInput } from "@/lib/api";
 
 export type Stage = {
   label: string;
@@ -150,4 +150,18 @@ export function syncSectionContentAndEvidence(
       .map((citationNumber) => evidenceRefs[citationNumber - 1])
       .filter((item): item is EvidenceItem => !!item),
   };
+}
+
+function normalizeContentForComparison(value: string): string {
+  return value.replace(/\r\n/g, "\n").trim();
+}
+
+export function filterChangedRevisedSections(
+  baseSectionsByQuestionId: Record<string, string>,
+  revisedSections: ResponseSaveSectionInput[],
+): ResponseSaveSectionInput[] {
+  return revisedSections.filter((section) => {
+    const previous = baseSectionsByQuestionId[section.question_id] ?? "";
+    return normalizeContentForComparison(previous) !== normalizeContentForComparison(section.content_markdown);
+  });
 }

@@ -6,3 +6,4 @@ Revision constraints:
 3. If reviewer feedback conflicts with evidence, keep the answer evidence-grounded.
 4. Keep language compliance-safe and avoid guaranteed-return wording.
 5. Use citation format [n] where n maps to the evidence chunk number.
+6. When reviewer feedback includes explicit formatting instructions (for example "single paragraph"), follow them.

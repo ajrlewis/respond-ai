@@ -222,7 +222,12 @@ type AIComposerProps = {
   instruction: string;
   askingAi: boolean;
   loading: boolean;
+  scope: "selected_question" | "whole_document";
+  questions: Array<{ id: string; label: string }>;
+  selectedQuestionId: string | null;
   onInstructionChange: (value: string) => void;
+  onScopeChange: (value: "selected_question" | "whole_document") => void;
+  onQuestionChange: (value: string) => void;
   onApply: () => void;
   onCancel: () => void;
 };
@@ -231,15 +236,55 @@ export function AIComposer({
   instruction,
   askingAi,
   loading,
+  scope,
+  questions,
+  selectedQuestionId,
   onInstructionChange,
+  onScopeChange,
+  onQuestionChange,
   onApply,
   onCancel,
 }: AIComposerProps) {
+  const hasQuestions = questions.length > 0;
   return (
     <section className={styles.aiComposer}>
       <p className={styles.sectionLabel}>Request revision</p>
+      <label htmlFor="revision-scope" className={styles.fieldLabel}>
+        Scope
+      </label>
+      <select
+        id="revision-scope"
+        value={scope}
+        onChange={(event) => onScopeChange(event.target.value as "selected_question" | "whole_document")}
+        disabled={askingAi || loading}
+      >
+        <option value="selected_question">Selected question</option>
+        <option value="whole_document">Whole document</option>
+      </select>
+      <p className={styles.questionMeta}>
+        Agent will plan and apply edits for the selected scope.
+      </p>
+      {scope === "selected_question" ? (
+        <>
+          <label htmlFor="revision-question" className={styles.fieldLabel}>
+            Question
+          </label>
+          <select
+            id="revision-question"
+            value={selectedQuestionId ?? ""}
+            onChange={(event) => onQuestionChange(event.target.value)}
+            disabled={askingAi || loading || !hasQuestions}
+          >
+            {questions.map((question, index) => (
+              <option key={question.id} value={question.id}>
+                {index + 1}. {question.label}
+              </option>
+            ))}
+          </select>
+        </>
+      ) : null}
       <label htmlFor="ai-instruction" className={styles.fieldLabel}>
-        Describe changes
+        Instructions
       </label>
       <textarea
         id="ai-instruction"
@@ -267,6 +312,7 @@ type EditorSurfaceProps = {
   hasUnsavedChanges: boolean;
   globalNotice: string | null;
   onSectionChange: (questionId: string, value: string) => void;
+  onSectionFocus?: (questionId: string) => void;
 };
 
 export function EditorSurface({
@@ -276,6 +322,7 @@ export function EditorSurface({
   hasUnsavedChanges,
   globalNotice,
   onSectionChange,
+  onSectionFocus,
 }: EditorSurfaceProps) {
   const [expandedSourcesByQuestionId, setExpandedSourcesByQuestionId] = useState<Record<string, boolean>>({});
 
@@ -302,6 +349,7 @@ export function EditorSurface({
             <textarea
               value={editableSections[question.id] ?? ""}
               onChange={(event) => onSectionChange(question.id, event.target.value)}
+              onFocus={() => onSectionFocus?.(question.id)}
               rows={8}
             />
             <div className={styles.supportingSources}>

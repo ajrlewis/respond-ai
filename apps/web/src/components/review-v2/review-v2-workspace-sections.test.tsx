@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   ActivityPanel,
+  AIComposer,
   DocumentMetaPanel,
   EditorSurface,
   GeneratingDraftPreview,
@@ -217,6 +218,39 @@ describe("StageCard", () => {
     expect(indicator).toBeTruthy();
     expect(indicator?.className).toMatch(/processingDoneDot/);
     expect(indicator?.className).not.toMatch(/runSpinner/);
+  });
+});
+
+describe("AIComposer", () => {
+  it("supports scoped revision targeting", async () => {
+    const user = userEvent.setup();
+    const onScopeChange = vi.fn();
+    const onQuestionChange = vi.fn();
+
+    render(
+      <AIComposer
+        instruction=""
+        askingAi={false}
+        loading={false}
+        scope="selected_question"
+        questions={[
+          { id: "q1", label: "Question 1" },
+          { id: "q2", label: "Question 2" },
+        ]}
+        selectedQuestionId="q1"
+        onInstructionChange={vi.fn()}
+        onScopeChange={onScopeChange}
+        onQuestionChange={onQuestionChange}
+        onApply={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText("Scope"), "whole_document");
+    expect(onScopeChange).toHaveBeenCalledWith("whole_document");
+
+    await user.selectOptions(screen.getByLabelText("Question"), "q2");
+    expect(onQuestionChange).toHaveBeenCalledWith("q2");
   });
 });
 

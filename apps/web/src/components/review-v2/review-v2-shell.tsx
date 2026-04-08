@@ -16,6 +16,7 @@ import {
   AI_STAGE_LABELS,
   GENERATION_STAGE_LABELS,
   emptyStages,
+  filterChangedRevisedSections,
   hasGlobalInsufficientEvidenceWarning,
   markAllStagesDone,
   syncSectionContentAndEvidence,
@@ -51,6 +52,7 @@ type ReviewV2ShellProps = {
 type InspectionPanel = "compare" | "activity" | null;
 type RunKind = "generation" | "revision";
 type RunOperation = "generation" | "revision";
+type RevisionScope = "selected_question" | "whole_document";
 
 function runCopy(kind: RunKind): { title: string; subtitle: string } {
   if (kind === "revision") {
@@ -90,6 +92,9 @@ export function ReviewV2Shell({
   const [hasRunHistory, setHasRunHistory] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
   const [isAiComposerOpen, setIsAiComposerOpen] = useState(false);
+  const [revisionScope, setRevisionScope] = useState<RevisionScope>("selected_question");
+  const [revisionQuestionId, setRevisionQuestionId] = useState<string | null>(null);
+  const [focusedQuestionId, setFocusedQuestionId] = useState<string | null>(null);
   const [compareData, setCompareData] = useState<ResponseVersionComparison | null>(null);
   const [compareLeftVersionId, setCompareLeftVersionId] = useState<string | null>(null);
   const [compareRightVersionId, setCompareRightVersionId] = useState<string | null>(null);
@@ -107,6 +112,19 @@ export function ReviewV2Shell({
   useEffect(() => {
     if (!document) return;
     setEditableSections(toQuestionContentMap(document));
+    const questionIds = document.questions.map((question) => question.id);
+    const fallbackQuestionId = focusedQuestionId && questionIds.includes(focusedQuestionId)
+      ? focusedQuestionId
+      : (questionIds[0] ?? null);
+    setRevisionQuestionId((previous) => {
+      if (previous && questionIds.includes(previous)) {
+        return previous;
+      }
+      return fallbackQuestionId;
+    });
+    if (focusedQuestionId && !questionIds.includes(focusedQuestionId)) {
+      setFocusedQuestionId(questionIds[0] ?? null);
+    }
     setCompareLeftVersionId((previous) => {
       if (previous && document.versions.some((version) => version.id === previous)) {
         return previous;
@@ -119,7 +137,7 @@ export function ReviewV2Shell({
       }
       return document.selected_version?.id ?? document.versions.at(-1)?.id ?? null;
     });
-  }, [document]);
+  }, [document, focusedQuestionId]);
 
   useEffect(() => {
     return () => {
@@ -440,11 +458,26 @@ export function ReviewV2Shell({
     setInspectionPanel(nextPanel);
   }
 
+  function handleRevisionScopeChange(scope: RevisionScope) {
+    setRevisionScope(scope);
+    if (scope === "selected_question" && !revisionQuestionId) {
+      setRevisionQuestionId(focusedQuestionId ?? questions[0]?.id ?? null);
+    }
+  }
+
   async function handleAskAI() {
     if (!document || !selectedVersion) return;
     const trimmed = aiInstruction.trim();
     if (!trimmed) {
       setError("Describe changes before submitting.");
+      return;
+    }
+    const scopedQuestionId =
+      revisionScope === "selected_question"
+        ? (revisionQuestionId ?? focusedQuestionId ?? questions[0]?.id ?? null)
+        : null;
+    if (revisionScope === "selected_question" && !scopedQuestionId) {
+      setError("Select a question to revise.");
       return;
     }
     setActiveRunKind("revision");
@@ -453,6 +486,7 @@ export function ReviewV2Shell({
     setIsAskingAi(true);
     setError(null);
     setNotice(null);
+    let didSaveRevision = false;
     try {
       await runProgress({
         documentId: document.id,
@@ -462,21 +496,44 @@ export function ReviewV2Shell({
           const result = await aiReviseResponseDocument(document.id, {
             instruction: trimmed,
             baseVersionId: selectedVersion.id,
+            questionId: scopedQuestionId,
             tone: "formal",
             runId,
           });
+          const baseSectionsByQuestionId = Object.fromEntries(
+            selectedVersion.sections.map((section) => [section.question_id, section.content_markdown] as const),
+          );
+          const changedSections = filterChangedRevisedSections(
+            baseSectionsByQuestionId,
+            result.revised_sections,
+          );
+          if (!changedSections.length) {
+            setNotice(
+              revisionScope === "selected_question"
+                ? "No updates were applied to the selected question. Try a more specific request."
+                : "No updates were applied to the draft. Try a more specific request.",
+            );
+            return;
+          }
           const nextDocument = await saveResponseDocumentVersion(document.id, {
             basedOnVersionId: selectedVersion.id,
             createdBy: currentUsername,
-            sections: result.revised_sections,
+            sections: changedSections,
           });
           setDocument(nextDocument);
+          didSaveRevision = true;
         },
       });
       setLastRunKind("revision");
-      setNotice("Revision submitted and saved as a new version.");
-      setAiInstruction("");
-      setIsAiComposerOpen(false);
+      if (didSaveRevision) {
+        setNotice(
+          revisionScope === "selected_question"
+            ? "Revision submitted for the selected question and saved as a new version."
+            : "Revision submitted for the full document and saved as a new version.",
+        );
+        setAiInstruction("");
+        setIsAiComposerOpen(false);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to submit revision.");
     } finally {
@@ -606,13 +663,23 @@ export function ReviewV2Shell({
                 compareRightVersionId={compareRightVersionId}
                 onSwitchVersion={handleSwitchVersion}
                 onDeleteVersion={handleDeleteVersion}
-                onToggleComposer={() => setIsAiComposerOpen((value) => !value)}
+                revisionScope={revisionScope}
+                revisionQuestionId={revisionQuestionId}
+                onToggleComposer={() => {
+                  setIsAiComposerOpen((value) => !value);
+                  if (!revisionQuestionId) {
+                    setRevisionQuestionId(focusedQuestionId ?? questions[0]?.id ?? null);
+                  }
+                }}
                 onInstructionChange={setAiInstruction}
+                onRevisionScopeChange={handleRevisionScopeChange}
+                onRevisionQuestionChange={setRevisionQuestionId}
                 onSubmitRevision={handleAskAI}
                 onCancelRevision={() => setIsAiComposerOpen(false)}
                 onSectionChange={(questionId, value) =>
                   setEditableSections((previous) => ({ ...previous, [questionId]: value }))
                 }
+                onSectionFocus={setFocusedQuestionId}
                 onSaveVersion={handleSaveVersion}
                 onApprove={handleApproveVersion}
                 onToggleActivity={handleToggleActivityPanel}
