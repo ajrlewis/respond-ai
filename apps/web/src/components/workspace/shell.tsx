@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ReviewV2UploadModal } from "@/components/review-v2/review-v2-upload-modal";
-import { extractQuestions } from "@/components/review-v2/review-v2-shell-utils";
+import { ReviewV2UploadModal } from "@/components/workspace/upload-modal";
+import { extractQuestions } from "@/components/workspace/shell-utils";
 import {
   DocumentMetaPanel,
   GeneratingDraftPreview,
@@ -10,8 +10,8 @@ import {
   StageCard,
   VersionRow,
   WorkspaceHeader,
-} from "@/components/review-v2/review-v2-workspace-sections";
-import { ReviewV2EditingView } from "@/components/review-v2/review-v2-editing-view";
+} from "@/components/workspace/workspace-sections";
+import { ReviewV2EditingView } from "@/components/workspace/editing-view";
 import {
   AI_STAGE_LABELS,
   GENERATION_STAGE_LABELS,
@@ -23,7 +23,7 @@ import {
   toQuestionContentMap,
   updateStagesFromServer,
   type Stage,
-} from "@/components/review-v2/review-v2-shell-helpers";
+} from "@/components/workspace/shell-helpers";
 import { reviewWorkspaceBranding } from "@/config/review-workspace";
 import {
   aiReviseResponseDocument,
@@ -42,14 +42,14 @@ import {
   type ResponseVersionComparison,
   type ResponseDocumentWorkflowEvent,
 } from "@/lib/api";
-import styles from "./review-v2-shell.module.css";
+import styles from "./shell.module.css";
 type ReviewV2ShellProps = {
   currentUsername?: string;
   isLoggingOut?: boolean;
   onLogout?: () => void;
 };
 
-type InspectionPanel = "compare" | "activity" | null;
+type InspectionPanel = "compare" | null;
 type RunKind = "generation" | "revision";
 type RunOperation = "generation" | "revision";
 type RevisionScope = "selected_question" | "whole_document";
@@ -348,7 +348,7 @@ export function ReviewV2Shell({
     if (!document) return;
     setActiveRunKind("generation");
     setHasRunHistory(true);
-    setInspectionPanel("activity");
+    setInspectionPanel(null);
     setIsGenerating(true);
     setError(null);
     setNotice(null);
@@ -453,10 +453,6 @@ export function ReviewV2Shell({
     await handleCompareVersions();
   }
 
-  function handleViewActivityPanel() {
-    setInspectionPanel("activity");
-  }
-
   function handleRevisionScopeChange(scope: RevisionScope) {
     setRevisionScope(scope);
     if (scope === "selected_question" && !revisionQuestionId) {
@@ -481,7 +477,7 @@ export function ReviewV2Shell({
     }
     setActiveRunKind("revision");
     setHasRunHistory(true);
-    setInspectionPanel("activity");
+    setInspectionPanel(null);
     setIsAskingAi(true);
     setError(null);
     setNotice(null);
@@ -650,10 +646,6 @@ export function ReviewV2Shell({
                 isApproving={isApproving}
                 loading={loading}
                 isProcessing={isProcessing}
-                hasRunHistory={hasRunHistory}
-                runTitle={runContent.title}
-                runSubtitle={runContent.subtitle}
-                runStages={stages}
                 deletingVersionId={deletingVersionId}
                 notice={notice}
                 inspectionPanel={inspectionPanel}
@@ -681,7 +673,6 @@ export function ReviewV2Shell({
                 onSectionFocus={setFocusedQuestionId}
                 onSaveVersion={handleSaveVersion}
                 onApprove={handleApproveVersion}
-                onToggleActivity={handleViewActivityPanel}
                 onToggleCompare={handleToggleComparePanel}
                 onCompare={handleCompareVersions}
                 onCompareLeftChange={setCompareLeftVersionId}

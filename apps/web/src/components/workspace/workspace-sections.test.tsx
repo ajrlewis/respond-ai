@@ -11,7 +11,7 @@ import {
   ProcessingStatusStrip,
   StageCard,
   VersionRow,
-} from "@/components/review-v2/review-v2-workspace-sections";
+} from "@/components/workspace/workspace-sections";
 import type { ResponseDocument } from "@/lib/api";
 
 function buildDocument(): ResponseDocument {

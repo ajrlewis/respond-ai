@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { extractQuestions, fallbackStages } from "@/components/review-v2/review-v2-shell-utils";
+import { extractQuestions, fallbackStages } from "@/components/workspace/shell-utils";
 
-describe("review-v2-shell-utils", () => {
+describe("shell-utils", () => {
   it("extracts unique question-like lines from uploaded text", () => {
     const input = `
       1. What is your investment strategy?

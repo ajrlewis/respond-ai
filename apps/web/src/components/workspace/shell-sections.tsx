@@ -1,6 +1,6 @@
 import { type AnswerVersion } from "@/lib/api";
 
-import { ReviewV2Document } from "@/components/review-v2/review-v2-document";
+import { ReviewV2Document } from "@/components/workspace/document";
 import { type UseWorkflowResult } from "@/hooks/use-workflow";
 
 type SummaryMetric = {

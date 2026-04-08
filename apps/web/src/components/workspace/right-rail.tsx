@@ -1,9 +1,9 @@
 import { type UseWorkflowResult } from "@/hooks/use-workflow";
 import { type ReviewRailTab, type ReviewWorkspaceModel } from "@/lib/review-models";
 
-import { durationLabel, stageStatusLabel } from "@/components/review-v2/review-v2-ui-utils";
+import { durationLabel, stageStatusLabel } from "@/components/workspace/ui-utils";
 
-import styles from "./review-v2-right-rail.module.css";
+import styles from "./right-rail.module.css";
 
 type ReviewV2RightRailProps = {
   workflow: UseWorkflowResult;

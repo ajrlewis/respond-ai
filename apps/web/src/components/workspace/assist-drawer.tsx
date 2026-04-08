@@ -1,8 +1,8 @@
-import { ReviewV2RightRail } from "@/components/review-v2/review-v2-right-rail";
+import { ReviewV2RightRail } from "@/components/workspace/right-rail";
 import { type UseWorkflowResult } from "@/hooks/use-workflow";
 import { type ReviewRailTab, type ReviewWorkspaceModel } from "@/lib/review-models";
 
-import styles from "./review-v2-shell.module.css";
+import styles from "./shell.module.css";
 
 type ReviewV2AssistDrawerProps = {
   isOpen: boolean;

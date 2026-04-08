@@ -5,7 +5,7 @@ import {
   markAllStagesDone,
   syncSectionContentAndEvidence,
   updateStagesFromServer,
-} from "@/components/review-v2/review-v2-shell-helpers";
+} from "@/components/workspace/shell-helpers";
 import type { EvidenceItem, ResponseSaveSectionInput } from "@/lib/api";
 
 function evidenceItem(id: string): EvidenceItem {

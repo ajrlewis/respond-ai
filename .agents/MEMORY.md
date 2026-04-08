@@ -48,6 +48,7 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - Response-document generate/revise now run through the existing LangGraph runtime per question and forward node-start progress into document SSE stage updates.
 - Response-document generation/revision must read post-run `RFPSession` snapshots using a fresh `AsyncSessionLocal` to avoid stale request-scoped identity-map state when LangGraph updates sessions concurrently.
 - Generation SSE `stage_update` events now include `question_completed`, `question_id`, `content_markdown`, and `evidence_refs` metadata so the review-v2 generating view can populate each answer field and supporting sources immediately after each question completes.
+- Web workspace UI now lives under `src/components/workspace`, `/` is the primary response workspace route, and `/review-v2` redirects to `/` for backward compatibility.
 
 ## Example update
 

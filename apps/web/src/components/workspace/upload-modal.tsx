@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import styles from "./review-v2-upload-modal.module.css";
+import styles from "./upload-modal.module.css";
 
 type ReviewV2UploadModalProps = {
   isOpen: boolean;

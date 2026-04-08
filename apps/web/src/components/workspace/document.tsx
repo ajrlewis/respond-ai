@@ -5,7 +5,7 @@ import { statusLabel, tokenizeNumberedCitations } from "@/lib/workflow";
 
 import { type UseWorkflowResult } from "@/hooks/use-workflow";
 
-import styles from "./review-v2-document.module.css";
+import styles from "./document.module.css";
 
 type ReviewV2DocumentProps = {
   workflow: UseWorkflowResult;

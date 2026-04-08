@@ -1,14 +1,13 @@
 import { type ResponseDocument, type ResponseSection, type ResponseVersionComparison } from "@/lib/api";
 import {
-  ActivityPanel,
   AIComposer,
   ComparePanel,
   EditorSurface,
   VersionRow,
-} from "@/components/review-v2/review-v2-workspace-sections";
-import styles from "./review-v2-shell.module.css";
+} from "@/components/workspace/workspace-sections";
+import styles from "./shell.module.css";
 
-type InspectionPanel = "compare" | "activity" | null;
+type InspectionPanel = "compare" | null;
 type RevisionScope = "selected_question" | "whole_document";
 
 type ReviewV2EditingViewProps = {
@@ -25,10 +24,6 @@ type ReviewV2EditingViewProps = {
   isApproving: boolean;
   loading: boolean;
   isProcessing: boolean;
-  hasRunHistory: boolean;
-  runTitle: string;
-  runSubtitle: string;
-  runStages: { label: string; status: "idle" | "running" | "done" }[];
   deletingVersionId: string | null;
   notice: string | null;
   inspectionPanel: InspectionPanel;
@@ -47,7 +42,6 @@ type ReviewV2EditingViewProps = {
   onSectionFocus: (questionId: string) => void;
   onSaveVersion: () => void;
   onApprove: () => void;
-  onToggleActivity: () => void;
   onToggleCompare: () => void;
   onCompare: () => void;
   onCompareLeftChange: (value: string) => void;
@@ -68,10 +62,6 @@ export function ReviewV2EditingView({
   isApproving,
   loading,
   isProcessing,
-  hasRunHistory,
-  runTitle,
-  runSubtitle,
-  runStages,
   deletingVersionId,
   notice,
   inspectionPanel,
@@ -90,7 +80,6 @@ export function ReviewV2EditingView({
   onSectionFocus,
   onSaveVersion,
   onApprove,
-  onToggleActivity,
   onToggleCompare,
   onCompare,
   onCompareLeftChange,
@@ -179,14 +168,6 @@ export function ReviewV2EditingView({
       <section className={styles.secondaryActions}>
         <button
           type="button"
-          className={inspectionPanel === "activity" ? styles.secondaryButton : styles.ghostButton}
-          onClick={onToggleActivity}
-          disabled={!hasRunHistory}
-        >
-          View activity
-        </button>
-        <button
-          type="button"
           className={inspectionPanel === "compare" ? styles.secondaryButton : styles.ghostButton}
           onClick={onToggleCompare}
           disabled={loading}
@@ -194,15 +175,6 @@ export function ReviewV2EditingView({
           Compare versions
         </button>
       </section>
-      {inspectionPanel === "activity" ? (
-        <ActivityPanel
-          title={runTitle}
-          subtitle={runSubtitle}
-          stages={runStages}
-          isRunning={isProcessing}
-          hasRunHistory={hasRunHistory}
-        />
-      ) : null}
       {inspectionPanel === "compare" && compareData ? (
         <ComparePanel
           compareData={compareData}

@@ -53,19 +53,29 @@
 .header {
   max-width: 1360px;
   margin: 0 auto;
+  display: grid;
+  gap: var(--space-8);
+}
+.brandBar {
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 10px var(--space-16);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+.brandBarIdentity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+.workspaceHeader {
   border: 1px solid var(--stroke);
   border-radius: var(--radius-lg);
   background: var(--surface);
   padding: var(--space-16);
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-16);
-}
-.brandRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-12);
 }
 .logo,
 .logoFallback {
@@ -88,12 +98,13 @@
 }
 .companyName {
   margin: 0;
-  color: var(--text-faint);
-  font-size: 0.76rem;
+  color: #3d556c;
+  font-size: 0.78rem;
+  font-weight: 620;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-.header h1 {
+.workspaceHeader h1 {
   margin: 2px 0 0;
   font-size: clamp(1.05rem, 1.7vw, 1.3rem);
   font-weight: 650;
@@ -646,7 +657,7 @@
   .page {
     padding: var(--space-16);
   }
-  .header, .documentHeader, .revisionToggleRow, .reviewActions, .compareHeader, .processingStrip { flex-direction: column; align-items: flex-start; }
+  .brandBar, .documentHeader, .revisionToggleRow, .reviewActions, .compareHeader, .processingStrip { flex-direction: column; align-items: flex-start; }
   .actionRow,
   .secondaryActions,
   .compareSelectors,

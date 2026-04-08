@@ -8,7 +8,7 @@ import {
 } from "@/lib/api";
 import { useState } from "react";
 
-import styles from "./review-v2-shell.module.css";
+import styles from "./shell.module.css";
 
 type Stage = {
   label: string;
@@ -87,25 +87,27 @@ export function WorkspaceHeader({
 }: WorkspaceHeaderProps) {
   return (
     <header className={styles.header}>
-      <div className={styles.brandRow}>
-        {logoSrc ? (
-          <img className={styles.logo} src={logoSrc} alt={`${companyName} logo`} />
-        ) : (
-          <span className={styles.logoFallback} aria-hidden="true">
-            {companyName.slice(0, 1)}
-          </span>
-        )}
-        <div>
+      <div className={styles.brandBar}>
+        <div className={styles.brandBarIdentity}>
+          {logoSrc ? (
+            <img className={styles.logo} src={logoSrc} alt={`${companyName} logo`} />
+          ) : (
+            <span className={styles.logoFallback} aria-hidden="true">
+              {companyName.slice(0, 1)}
+            </span>
+          )}
           <p className={styles.companyName}>{companyName}</p>
-          <h1>{workspaceTitle}</h1>
-          {workspaceSubtitle ? <p className={styles.workspaceSubtitle}>{workspaceSubtitle}</p> : null}
         </div>
+        {onLogout ? (
+          <button type="button" className={styles.ghostButton} onClick={onLogout} disabled={isLoggingOut}>
+            {isLoggingOut ? "Logging out..." : "Logout"}
+          </button>
+        ) : null}
       </div>
-      {onLogout ? (
-        <button type="button" className={styles.ghostButton} onClick={onLogout} disabled={isLoggingOut}>
-          {isLoggingOut ? "Logging out..." : "Logout"}
-        </button>
-      ) : null}
+      <div className={styles.workspaceHeader}>
+        <h1>{workspaceTitle}</h1>
+        {workspaceSubtitle ? <p className={styles.workspaceSubtitle}>{workspaceSubtitle}</p> : null}
+      </div>
     </header>
   );
 }
