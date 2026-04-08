@@ -85,8 +85,10 @@ class _FakeService:
             raise LookupError("Response document not found.")
         return self.doc_payload
 
-    async def generate_document(self, document_id, tone, created_by):
+    async def generate_document(self, document_id, tone, created_by, progress=None):
         self.calls.append(("generate_document", {"document_id": str(document_id), "tone": tone, "created_by": created_by}))
+        if progress is not None:
+            await progress("retrieve_supporting_material", "Retrieve supporting material", "running")
         return self.doc_payload
 
     async def list_versions(self, document_id):
@@ -114,8 +116,10 @@ class _FakeService:
             "section_diffs": [],
         }
 
-    async def ai_revise(self, document_id, payload: AIReviseRequest):
+    async def ai_revise(self, document_id, payload: AIReviseRequest, progress=None):
         self.calls.append(("ai_revise", {"document_id": str(document_id), "payload": payload.model_dump(mode="json")}))
+        if progress is not None:
+            await progress("analyze_revision_request", "Analyze revision request", "running")
         return {
             "base_version_id": self.version_id,
             "revised_sections": [

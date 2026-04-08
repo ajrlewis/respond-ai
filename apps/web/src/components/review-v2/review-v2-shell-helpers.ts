@@ -5,6 +5,39 @@ export type Stage = {
   status: "idle" | "running" | "done";
 };
 
+export function updateStagesFromServer(
+  stages: Stage[],
+  stageLabel: string,
+  status: "running" | "done",
+): Stage[] {
+  const trimmedLabel = stageLabel.trim();
+  if (!trimmedLabel) return stages;
+
+  const next = [...stages];
+  let targetIndex = next.findIndex((stage) => stage.label === trimmedLabel);
+  if (targetIndex < 0) {
+    next.push({ label: trimmedLabel, status: "idle" });
+    targetIndex = next.length - 1;
+  }
+
+  if (status === "running") {
+    return next.map((stage, index) => {
+      if (index < targetIndex) return { ...stage, status: "done" };
+      if (index === targetIndex) return { ...stage, status: "running" };
+      return { ...stage, status: "idle" };
+    });
+  }
+
+  return next.map((stage, index) => {
+    if (index <= targetIndex) return { ...stage, status: "done" };
+    return { ...stage, status: "idle" };
+  });
+}
+
+export function markAllStagesDone(stages: Stage[]): Stage[] {
+  return stages.map((stage) => ({ ...stage, status: "done" }));
+}
+
 export const GENERATION_STAGE_LABELS = [
   "Retrieve supporting material",
   "Rank evidence",

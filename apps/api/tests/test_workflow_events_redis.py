@@ -108,3 +108,27 @@ def test_publish_thread_reaches_mapped_session_subscribers(monkeypatch) -> None:
     reason, error = asyncio.run(_run())
     assert reason == "workflow_error"
     assert error == "boom"
+
+
+def test_publish_document_reaches_document_subscribers_with_metadata(monkeypatch) -> None:
+    fake_redis = _FakeRedis()
+    monkeypatch.setattr(workflow_events, "get_redis_client", lambda: fake_redis)
+
+    async def _run() -> tuple[str, str | None, dict | None]:
+        bus = workflow_events.WorkflowEventBus(channel_prefix="workflow")
+        async with bus.subscribe_document("document-1") as sub:
+            await bus.publish_document(
+                document_id="document-1",
+                reason="stage_update",
+                node_name="rank_evidence",
+                status="running",
+                metadata={"run_id": "run-1", "operation": "generation"},
+            )
+            signal = await sub.next_event(timeout=0.5)
+            assert signal is not None
+            return signal.reason, signal.node_name, signal.metadata
+
+    reason, node_name, metadata = asyncio.run(_run())
+    assert reason == "stage_update"
+    assert node_name == "rank_evidence"
+    assert metadata == {"run_id": "run-1", "operation": "generation"}

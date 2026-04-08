@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Awaitable, Callable
 from uuid import UUID
 
 from sqlalchemy import select
@@ -49,6 +50,9 @@ class _HydratedDocument:
     document: ResponseDocument
     questions: list[ResponseQuestion]
     versions: list[ResponseDocumentVersion]
+
+
+DocumentProgressCallback = Callable[[str, str, str], Awaitable[None]]
 
 
 class ResponseDocumentService:
@@ -191,6 +195,7 @@ class ResponseDocumentService:
         *,
         tone: str,
         created_by: str | None,
+        progress: DocumentProgressCallback | None = None,
     ) -> ResponseDocumentOut:
         """Generate answers for all questions and save as a new version."""
 
@@ -213,9 +218,26 @@ class ResponseDocumentService:
         self.db.add(version)
         await self.db.flush()
 
+        if progress:
+            await progress("retrieve_supporting_material", "Retrieve supporting material", "running")
+        retrieved_by_question: dict[UUID, list] = {}
         for question in questions:
-            retrieved = await self.retrieval.hybrid_search(question.extracted_text, top_k=6)
-            evidence = [chunk_to_dict(item) for item in retrieved]
+            retrieved_by_question[question.id] = await self.retrieval.hybrid_search(
+                question.extracted_text,
+                top_k=6,
+            )
+
+        if progress:
+            await progress("rank_evidence", "Rank evidence", "running")
+        evidence_by_question = {
+            question.id: [chunk_to_dict(item) for item in retrieved_by_question.get(question.id, [])]
+            for question in questions
+        }
+
+        if progress:
+            await progress("draft_response_sections", "Draft response sections", "running")
+        for question in questions:
+            evidence = evidence_by_question.get(question.id, [])
             draft_text, _, confidence_payload, _ = await draft_answer(
                 question=question.extracted_text,
                 question_type="general",
@@ -239,6 +261,9 @@ class ResponseDocumentService:
                     metadata_json={},
                 )
             )
+
+        if progress:
+            await progress("review_citations", "Review citations", "running")
 
         hydrated.document.status = "draft_ready"
         await self.db.commit()
@@ -358,6 +383,8 @@ class ResponseDocumentService:
         self,
         document_id: UUID,
         payload: AIReviseRequest,
+        *,
+        progress: DocumentProgressCallback | None = None,
     ) -> AIReviseResponse:
         """Return AI-revised section drafts without auto-saving a version."""
 
@@ -370,7 +397,12 @@ class ResponseDocumentService:
         base_sections = {section.question_id: section for section in base.sections}
         target_question_ids = [payload.question_id] if payload.question_id else [item.id for item in hydrated.questions]
 
+        if progress:
+            await progress("analyze_revision_request", "Analyze revision request", "running")
+
         revised_sections: list[SaveSectionInput] = []
+        if progress:
+            await progress("revise_draft_text", "Revise draft text", "running")
         for question_id in target_question_ids:
             question = question_by_id.get(question_id)
             section = base_sections.get(question_id)
@@ -407,6 +439,9 @@ class ResponseDocumentService:
                     coverage_score=coverage_to_score(confidence_payload.get("coverage")),
                 )
             )
+
+        if progress:
+            await progress("prepare_editable_suggestions", "Prepare editable suggestions", "running")
 
         return AIReviseResponse(base_version_id=base.id, revised_sections=revised_sections)
 

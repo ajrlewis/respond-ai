@@ -174,6 +174,15 @@ export type AIReviseResponseDocumentResult = {
   revised_sections: ResponseSaveSectionInput[];
 };
 
+export type ResponseDocumentWorkflowEvent = {
+  reason: string;
+  timestamp?: string;
+  node?: string;
+  status?: string;
+  error?: string;
+  metadata?: Record<string, unknown>;
+};
+
 type AuthResponse = {
   authenticated: boolean;
   user: AuthUser;
@@ -199,6 +208,25 @@ function resolveApiBaseUrl(): string {
 }
 
 const API_BASE_URL = resolveApiBaseUrl();
+
+function resolveSseBaseUrl(): string {
+  const configuredSse = (process.env.NEXT_PUBLIC_API_SSE_BASE_URL ?? "").trim();
+  if (configuredSse) {
+    return normalizeBaseUrl(configuredSse);
+  }
+  if (API_BASE_URL) {
+    return API_BASE_URL;
+  }
+  if (typeof window !== "undefined") {
+    const { protocol, hostname } = window.location;
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return `${protocol}//${hostname}:8000`;
+    }
+  }
+  return "";
+}
+
+const SSE_BASE_URL = resolveSseBaseUrl();
 
 async function parseErrorMessage(response: Response): Promise<string> {
   const fallback = `Request failed with status ${response.status}`;
@@ -296,15 +324,24 @@ export async function fetchSessionByThreadId(threadId: string): Promise<Session 
 }
 
 export function openSessionEventsStream(sessionId: string): EventSource {
-  return new EventSource(`${API_BASE_URL}/api/questions/${encodeURIComponent(sessionId)}/events`, {
+  return new EventSource(`${SSE_BASE_URL}/api/questions/${encodeURIComponent(sessionId)}/events`, {
     withCredentials: true,
   });
 }
 
 export function openThreadEventsStream(threadId: string): EventSource {
-  return new EventSource(`${API_BASE_URL}/api/questions/thread/${encodeURIComponent(threadId)}/events`, {
+  return new EventSource(`${SSE_BASE_URL}/api/questions/thread/${encodeURIComponent(threadId)}/events`, {
     withCredentials: true,
   });
+}
+
+export function openResponseDocumentEventsStream(documentId: string): EventSource {
+  return new EventSource(
+    `${SSE_BASE_URL}/api/response-documents/${encodeURIComponent(documentId)}/events`,
+    {
+      withCredentials: true,
+    },
+  );
 }
 
 export async function fetchDrafts(sessionId: string): Promise<AnswerVersion[]> {
@@ -395,7 +432,7 @@ export async function fetchResponseDocument(
 
 export async function generateResponseDocument(
   documentId: string,
-  options?: { tone?: Tone; createdBy?: string },
+  options?: { tone?: Tone; createdBy?: string; runId?: string },
 ): Promise<ResponseDocument> {
   return request<ResponseDocument>(
     `/api/response-documents/${encodeURIComponent(documentId)}/generate`,
@@ -404,6 +441,7 @@ export async function generateResponseDocument(
       body: JSON.stringify({
         tone: options?.tone ?? "formal",
         created_by: options?.createdBy,
+        run_id: options?.runId,
       }),
     },
   );
@@ -482,6 +520,7 @@ export async function aiReviseResponseDocument(
     baseVersionId?: string | null;
     questionId?: string | null;
     selectedText?: string | null;
+    runId?: string;
   },
 ): Promise<AIReviseResponseDocumentResult> {
   return request<AIReviseResponseDocumentResult>(
@@ -494,6 +533,7 @@ export async function aiReviseResponseDocument(
         base_version_id: payload.baseVersionId ?? null,
         question_id: payload.questionId ?? null,
         selected_text: payload.selectedText ?? null,
+        run_id: payload.runId,
       }),
     },
   );

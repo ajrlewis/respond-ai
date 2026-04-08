@@ -22,6 +22,7 @@ def test_main_app_imports_and_registers_core_routes() -> None:
     assert "/api/documents" in route_paths
     assert "/api/response-documents" in route_paths
     assert "/api/response-documents/sample" in route_paths
+    assert "/api/response-documents/{document_id}/events" in route_paths
     assert "/api/response-documents/{document_id}/generate" in route_paths
     assert "/api/response-documents/{document_id}/versions" in route_paths
     assert "/api/response-documents/{document_id}/versions/{version_id}/approve" in route_paths

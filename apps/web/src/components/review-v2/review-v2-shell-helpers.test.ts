@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { syncSectionContentAndEvidence } from "@/components/review-v2/review-v2-shell-helpers";
+import {
+  markAllStagesDone,
+  syncSectionContentAndEvidence,
+  updateStagesFromServer,
+} from "@/components/review-v2/review-v2-shell-helpers";
 import type { EvidenceItem } from "@/lib/api";
 
 function evidenceItem(id: string): EvidenceItem {
@@ -46,5 +50,52 @@ describe("syncSectionContentAndEvidence", () => {
 
     expect(synced.contentMarkdown).toBe("Updated answer without explicit citations.");
     expect(synced.evidenceRefs).toEqual([]);
+  });
+});
+
+describe("updateStagesFromServer", () => {
+  it("advances running stage and marks prior stages done", () => {
+    const next = updateStagesFromServer(
+      [
+        { label: "Retrieve supporting material", status: "running" },
+        { label: "Rank evidence", status: "idle" },
+        { label: "Draft response sections", status: "idle" },
+      ],
+      "Rank evidence",
+      "running",
+    );
+
+    expect(next).toEqual([
+      { label: "Retrieve supporting material", status: "done" },
+      { label: "Rank evidence", status: "running" },
+      { label: "Draft response sections", status: "idle" },
+    ]);
+  });
+
+  it("appends unknown server stage labels in order", () => {
+    const next = updateStagesFromServer(
+      [{ label: "Analyze revision request", status: "running" }],
+      "Prepare editable suggestions",
+      "running",
+    );
+
+    expect(next).toEqual([
+      { label: "Analyze revision request", status: "done" },
+      { label: "Prepare editable suggestions", status: "running" },
+    ]);
+  });
+});
+
+describe("markAllStagesDone", () => {
+  it("marks every stage as done", () => {
+    const next = markAllStagesDone([
+      { label: "Retrieve supporting material", status: "running" },
+      { label: "Rank evidence", status: "idle" },
+    ]);
+
+    expect(next).toEqual([
+      { label: "Retrieve supporting material", status: "done" },
+      { label: "Rank evidence", status: "done" },
+    ]);
   });
 });

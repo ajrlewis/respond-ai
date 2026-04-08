@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -20,12 +22,70 @@ from app.schemas.response_documents import (
     SaveResponseVersionRequest,
 )
 from app.services.response_documents import ResponseDocumentService
+from app.services.workflow_events import format_sse_comment, format_sse_event, workflow_event_bus
 
 router = APIRouter(
     prefix="/api/response-documents",
     tags=["response-documents"],
 )
 logger = logging.getLogger(__name__)
+
+
+def _document_workflow_payload(signal) -> dict:
+    payload: dict[str, object] = {
+        "reason": signal.reason,
+        "timestamp": signal.timestamp,
+    }
+    if signal.node_name is not None:
+        payload["node"] = signal.node_name
+    if signal.status is not None:
+        payload["status"] = signal.status
+    if signal.error:
+        payload["error"] = signal.error
+    if signal.metadata:
+        payload["metadata"] = signal.metadata
+    return payload
+
+
+@router.get("/{document_id}/events")
+async def stream_response_document_events(
+    document_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Stream response-document workflow updates using SSE."""
+
+    service = ResponseDocumentService(db)
+    try:
+        await service.get_document(document_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    async def event_generator():
+        async with workflow_event_bus.subscribe_document(str(document_id)) as subscription:
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                signal = await subscription.next_event(timeout=15.0)
+                if signal is None:
+                    yield format_sse_comment("keepalive")
+                    continue
+
+                yield format_sse_event(
+                    event=signal.event,
+                    data=_document_workflow_payload(signal),
+                )
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("", response_model=ResponseDocumentOut)
@@ -79,15 +139,60 @@ async def generate_response_document(
     """Generate a draft answer for each question and save as a new version."""
 
     service = ResponseDocumentService(db)
+    run_id = (payload.run_id or "").strip() or str(uuid.uuid4())
+
+    async def publish_stage(stage_id: str, stage_label: str, stage_status: str) -> None:
+        await workflow_event_bus.publish_document(
+            document_id=str(document_id),
+            reason="stage_update",
+            node_name=stage_id,
+            status=stage_status,
+            metadata={
+                "run_id": run_id,
+                "operation": "generation",
+                "stage_id": stage_id,
+                "stage_label": stage_label,
+                "stage_status": stage_status,
+            },
+        )
+
+    await workflow_event_bus.publish_document(
+        document_id=str(document_id),
+        reason="run_started",
+        status="running",
+        metadata={"run_id": run_id, "operation": "generation"},
+    )
     try:
-        return await service.generate_document(
+        response = await service.generate_document(
             document_id,
             tone=payload.tone,
             created_by=payload.created_by,
+            progress=publish_stage,
         )
+        await workflow_event_bus.publish_document(
+            document_id=str(document_id),
+            reason="run_completed",
+            status="done",
+            metadata={"run_id": run_id, "operation": "generation"},
+        )
+        return response
     except LookupError as exc:
+        await workflow_event_bus.publish_document(
+            document_id=str(document_id),
+            reason="run_failed",
+            status="failed",
+            error=str(exc),
+            metadata={"run_id": run_id, "operation": "generation"},
+        )
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
+        await workflow_event_bus.publish_document(
+            document_id=str(document_id),
+            reason="run_failed",
+            status="failed",
+            error=str(exc),
+            metadata={"run_id": run_id, "operation": "generation"},
+        )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -183,9 +288,53 @@ async def ai_revise_response_document(
     """Return AI revision suggestions from the selected version."""
 
     service = ResponseDocumentService(db)
+    run_id = (payload.run_id or "").strip() or str(uuid.uuid4())
+
+    async def publish_stage(stage_id: str, stage_label: str, stage_status: str) -> None:
+        await workflow_event_bus.publish_document(
+            document_id=str(document_id),
+            reason="stage_update",
+            node_name=stage_id,
+            status=stage_status,
+            metadata={
+                "run_id": run_id,
+                "operation": "revision",
+                "stage_id": stage_id,
+                "stage_label": stage_label,
+                "stage_status": stage_status,
+            },
+        )
+
+    await workflow_event_bus.publish_document(
+        document_id=str(document_id),
+        reason="run_started",
+        status="running",
+        metadata={"run_id": run_id, "operation": "revision"},
+    )
     try:
-        return await service.ai_revise(document_id, payload)
+        response = await service.ai_revise(document_id, payload, progress=publish_stage)
+        await workflow_event_bus.publish_document(
+            document_id=str(document_id),
+            reason="run_completed",
+            status="done",
+            metadata={"run_id": run_id, "operation": "revision"},
+        )
+        return response
     except LookupError as exc:
+        await workflow_event_bus.publish_document(
+            document_id=str(document_id),
+            reason="run_failed",
+            status="failed",
+            error=str(exc),
+            metadata={"run_id": run_id, "operation": "revision"},
+        )
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
+        await workflow_event_bus.publish_document(
+            document_id=str(document_id),
+            reason="run_failed",
+            status="failed",
+            error=str(exc),
+            metadata={"run_id": run_id, "operation": "revision"},
+        )
         raise HTTPException(status_code=400, detail=str(exc)) from exc

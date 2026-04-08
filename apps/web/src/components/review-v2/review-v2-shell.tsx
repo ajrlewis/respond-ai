@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ReviewV2UploadModal } from "@/components/review-v2/review-v2-upload-modal";
 import { extractQuestions } from "@/components/review-v2/review-v2-shell-utils";
 import {
@@ -13,11 +13,12 @@ import { ReviewV2EditingView } from "@/components/review-v2/review-v2-editing-vi
 import {
   AI_STAGE_LABELS,
   GENERATION_STAGE_LABELS,
-  INSUFFICIENT_EVIDENCE_WARNING,
   emptyStages,
   hasGlobalInsufficientEvidenceWarning,
+  markAllStagesDone,
   syncSectionContentAndEvidence,
   toQuestionContentMap,
+  updateStagesFromServer,
   type Stage,
 } from "@/components/review-v2/review-v2-shell-helpers";
 import { reviewWorkspaceBranding } from "@/config/review-workspace";
@@ -30,10 +31,12 @@ import {
   deleteResponseDocumentVersion,
   fetchResponseDocument,
   generateResponseDocument,
+  openResponseDocumentEventsStream,
   saveResponseDocumentVersion,
   type ResponseVersionSummary,
   type ResponseDocument,
   type ResponseVersionComparison,
+  type ResponseDocumentWorkflowEvent,
 } from "@/lib/api";
 import styles from "./review-v2-shell.module.css";
 type ReviewV2ShellProps = {
@@ -44,6 +47,7 @@ type ReviewV2ShellProps = {
 
 type InspectionPanel = "compare" | "activity" | null;
 type RunKind = "generation" | "revision";
+type RunOperation = "generation" | "revision";
 
 function runCopy(kind: RunKind): { title: string; subtitle: string } {
   if (kind === "revision") {
@@ -87,6 +91,7 @@ export function ReviewV2Shell({
   const [compareLeftVersionId, setCompareLeftVersionId] = useState<string | null>(null);
   const [compareRightVersionId, setCompareRightVersionId] = useState<string | null>(null);
   const [stages, setStages] = useState<Stage[]>(emptyStages(GENERATION_STAGE_LABELS));
+  const runEventsRef = useRef<EventSource | null>(null);
   const selectedVersion = document?.selected_version ?? null;
   const versions = document?.versions ?? [];
   const questions = document?.questions ?? [];
@@ -110,6 +115,13 @@ export function ReviewV2Shell({
       return document.selected_version?.id ?? document.versions.at(-1)?.id ?? null;
     });
   }, [document]);
+
+  useEffect(() => {
+    return () => {
+      runEventsRef.current?.close();
+      runEventsRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!notice) return;
@@ -141,30 +153,58 @@ export function ReviewV2Shell({
       : hasDraft
         ? "editing"
         : "ready_to_generate";
-  async function runProgress(labels: string[], action: () => Promise<void>) {
-    const nextStages = emptyStages(labels);
-    if (nextStages.length) nextStages[0] = { ...nextStages[0], status: "running" };
-    setStages(nextStages);
-    if (!labels.length) {
-      await action();
-      return;
-    }
 
-    let activeIndex = 0;
-    const interval = window.setInterval(() => {
-      activeIndex = (activeIndex + 1) % labels.length;
-      setStages((previous) =>
-        previous.map((stage, stageIndex) => ({
-          ...stage,
-          status: stageIndex === activeIndex ? "running" : "idle",
-        })),
-      );
-    }, 900);
+  async function runProgress(params: {
+    documentId: string;
+    operation: RunOperation;
+    labels: string[];
+    action: (runId: string) => Promise<void>;
+  }): Promise<void> {
+    const { documentId, operation, labels, action } = params;
+    const runId = crypto.randomUUID();
+    setStages(emptyStages(labels));
+    runEventsRef.current?.close();
+    const source = openResponseDocumentEventsStream(documentId);
+    runEventsRef.current = source;
+
+    const handleWorkflowState = (event: Event) => {
+      const message = event as MessageEvent<string>;
+      let payload: ResponseDocumentWorkflowEvent;
+      try {
+        payload = JSON.parse(message.data) as ResponseDocumentWorkflowEvent;
+      } catch {
+        return;
+      }
+
+      const metadata = payload.metadata ?? {};
+      const eventRunId = typeof metadata.run_id === "string" ? metadata.run_id : null;
+      const eventOperation = typeof metadata.operation === "string" ? metadata.operation : null;
+      if (eventRunId !== runId || eventOperation !== operation) return;
+
+      if (payload.error) {
+        setError(payload.error);
+      }
+
+      const stageLabel = typeof metadata.stage_label === "string" ? metadata.stage_label : null;
+      const stageStatus = metadata.stage_status;
+      if (stageLabel && (stageStatus === "running" || stageStatus === "done")) {
+        setStages((previous) => updateStagesFromServer(previous, stageLabel, stageStatus));
+      }
+
+      if (payload.reason === "run_completed") {
+        setStages((previous) => markAllStagesDone(previous));
+      }
+    };
+
+    source.addEventListener("workflow_state", handleWorkflowState);
+
     try {
-      await action();
-      setStages((previous) => previous.map((stage) => ({ ...stage, status: "done" })));
+      await action(runId);
+      setStages((previous) => markAllStagesDone(previous));
     } finally {
-      window.clearInterval(interval);
+      source.removeEventListener("workflow_state", handleWorkflowState);
+      source.close();
+      if (runEventsRef.current === source) runEventsRef.current = null;
     }
   }
   async function handleUseExamples() {
@@ -238,12 +278,18 @@ export function ReviewV2Shell({
     setError(null);
     setNotice(null);
     try {
-      await runProgress(GENERATION_STAGE_LABELS, async () => {
-        const nextDocument = await generateResponseDocument(document.id, {
-          tone: "formal",
-          createdBy: currentUsername,
-        });
-        setDocument(nextDocument);
+      await runProgress({
+        documentId: document.id,
+        operation: "generation",
+        labels: GENERATION_STAGE_LABELS,
+        action: async (runId) => {
+          const nextDocument = await generateResponseDocument(document.id, {
+            tone: "formal",
+            createdBy: currentUsername,
+            runId,
+          });
+          setDocument(nextDocument);
+        },
       });
       setLastRunKind("generation");
       setNotice("Draft generated. Edit directly or request a revision.");
@@ -351,18 +397,24 @@ export function ReviewV2Shell({
     setError(null);
     setNotice(null);
     try {
-      await runProgress(AI_STAGE_LABELS, async () => {
-        const result = await aiReviseResponseDocument(document.id, {
-          instruction: trimmed,
-          baseVersionId: selectedVersion.id,
-          tone: "formal",
-        });
-        const nextDocument = await saveResponseDocumentVersion(document.id, {
-          basedOnVersionId: selectedVersion.id,
-          createdBy: currentUsername,
-          sections: result.revised_sections,
-        });
-        setDocument(nextDocument);
+      await runProgress({
+        documentId: document.id,
+        operation: "revision",
+        labels: AI_STAGE_LABELS,
+        action: async (runId) => {
+          const result = await aiReviseResponseDocument(document.id, {
+            instruction: trimmed,
+            baseVersionId: selectedVersion.id,
+            tone: "formal",
+            runId,
+          });
+          const nextDocument = await saveResponseDocumentVersion(document.id, {
+            basedOnVersionId: selectedVersion.id,
+            createdBy: currentUsername,
+            sections: result.revised_sections,
+          });
+          setDocument(nextDocument);
+        },
       });
       setLastRunKind("revision");
       setNotice("Revision submitted and saved as a new version.");

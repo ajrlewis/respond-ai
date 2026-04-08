@@ -80,6 +80,7 @@ class GenerateResponseDocumentRequest(BaseModel):
 
     tone: Literal["concise", "detailed", "formal"] = "formal"
     created_by: str | None = None
+    run_id: str | None = Field(default=None, max_length=120)
 
 
 class SaveSectionInput(BaseModel):
@@ -118,6 +119,7 @@ class AIReviseRequest(BaseModel):
     base_version_id: UUID | None = None
     question_id: UUID | None = None
     selected_text: str | None = None
+    run_id: str | None = Field(default=None, max_length=120)
 
 
 class AIReviseResponse(BaseModel):
