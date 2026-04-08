@@ -107,28 +107,31 @@ export function ReviewV2EditingView({
           onClick={onToggleComposer}
           disabled={isAskingAi || loading}
         >
-          {isAiComposerOpen ? "Hide revision request" : "Request revision"}
+          {isAiComposerOpen ? "Hide suggestions" : "Suggest changes"}
         </button>
         {selectedVersion.is_final ? <p className={styles.finalTag}>Approved version</p> : null}
+        {isAiComposerOpen ? (
+          <div className={styles.revisionComposerOverlay}>
+            <AIComposer
+              instruction={aiInstruction}
+              askingAi={isAskingAi}
+              loading={loading}
+              mode="overlay"
+              scope={revisionScope}
+              questions={document.questions.map((question) => ({
+                id: question.id,
+                label: question.extracted_text,
+              }))}
+              selectedQuestionId={revisionQuestionId}
+              onInstructionChange={onInstructionChange}
+              onScopeChange={onRevisionScopeChange}
+              onQuestionChange={onRevisionQuestionChange}
+              onApply={onSubmitRevision}
+              onCancel={onCancelRevision}
+            />
+          </div>
+        ) : null}
       </section>
-      {isAiComposerOpen ? (
-        <AIComposer
-          instruction={aiInstruction}
-          askingAi={isAskingAi}
-          loading={loading}
-          scope={revisionScope}
-          questions={document.questions.map((question) => ({
-            id: question.id,
-            label: question.extracted_text,
-          }))}
-          selectedQuestionId={revisionQuestionId}
-          onInstructionChange={onInstructionChange}
-          onScopeChange={onRevisionScopeChange}
-          onQuestionChange={onRevisionQuestionChange}
-          onApply={onSubmitRevision}
-          onCancel={onCancelRevision}
-        />
-      ) : null}
       <EditorSurface
         questions={document.questions}
         sectionsByQuestionId={sectionsByQuestionId}
