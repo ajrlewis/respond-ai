@@ -10,6 +10,7 @@ from app.ai.factory import validate_ai_configuration
 from app.core.config import settings
 from app.core.logging import configure_logging
 from app.db.migration_check import assert_schema_current_async
+from app.graph.runtime import ensure_checkpointer_ready
 from app.routes.ask import router as ask_router
 from app.routes.auth import router as auth_router
 from app.routes.client_config import router as client_config_router
@@ -56,6 +57,7 @@ def create_app(*, register_startup: bool = True) -> FastAPI:
             logger.info("API startup initialization started")
             validate_ai_configuration()
             await assert_schema_current_async()
+            await ensure_checkpointer_ready()
             logger.info("API startup initialization completed")
 
         @application.on_event("shutdown")

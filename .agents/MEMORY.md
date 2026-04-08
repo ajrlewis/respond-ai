@@ -55,6 +55,7 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - Frontend review-v2 workspace now applies `workspace.json` `ui_flags` and wording from `/api/client-config/workspace` (example-question visibility, source filename visibility, revision scope availability, revision submit/validation copy, and approval button/helper copy).
 - Seed corpus markdown files now live under `config/documents/data`; `apps/api/scripts/seed_data.py` ingests from that directory (not `data/docs`).
 - Docker Compose now mounts repo `./config` into API/worker containers at `/app/config` so client branding/workspace/prompt/document overrides load correctly in containerized runs.
+- LangGraph checkpointer tables/indexes are initialized once during API startup; workflow runs no longer call checkpointer setup per request.
 
 ## Example update
 

@@ -31,7 +31,7 @@ flowchart LR
 
     Worker -->|read/write sessions, reviews, drafts,\naudit, telemetry, checkpoints| Postgres[("Postgres + pgvector")]
     Worker -->|retrieve evidence chunks| Postgres
-    Seed["scripts/seed_data.py"] -->|ingest data/docs/*.md| Postgres
+    Seed["scripts/seed_data.py"] -->|ingest config/documents/data/*.md| Postgres
 ```
 
 ## AI Workflow Graph
@@ -208,6 +208,18 @@ docker compose run --rm api uv run python scripts/seed_data.py
 docker compose up -d api worker web
 ```
 
+### Clean Install
+
+Use this sequence for a clean install and initial seed:
+
+```bash
+docker compose build api worker web
+docker compose up -d postgres redis
+docker compose run --rm api uv run alembic upgrade head
+docker compose run --rm api uv run python scripts/seed_data.py
+docker compose up -d api worker web
+```
+
 Verify:
 
 - Web: http://localhost:3000
@@ -271,7 +283,7 @@ docker compose exec -T api uv run python scripts/seed_data.py
 
 ```mermaid
 flowchart LR
-    A["Local markdown docs<br/>data/docs/*.md"] --> B["Load markdown files"]
+    A["Local markdown docs<br/>config/documents/data/*.md"] --> B["Load markdown files"]
     B --> C["Chunk content"]
     C --> D["Generate embeddings"]
     C --> E["Extract metadata<br/>(source, filename, chunk index)"]
@@ -281,7 +293,7 @@ flowchart LR
 
 Seed behavior:
 
-- Reads markdown from `data/docs/*.md`
+- Reads markdown from `config/documents/data/*.md`
 - Replaces previously-seeded rows by filename (safe to rerun)
 - Requires migrations to be current before it runs
 - Not required for auth/login, but required for meaningful retrieval-backed answers
