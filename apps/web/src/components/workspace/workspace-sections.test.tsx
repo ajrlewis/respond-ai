@@ -255,6 +255,21 @@ describe("StageCard", () => {
     expect(screen.getByText("Question 1 of 3: Draft response sections")).toBeInTheDocument();
   });
 
+  it("keeps status and scoped stage labels visible for varied text lengths", () => {
+    render(
+      <StageCard
+        title="Generating draft"
+        scopeLabel="Question 2 of 3"
+        stages={[
+          { label: "Plan approach", status: "running" },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Generating draft")).toBeInTheDocument();
+    expect(screen.getByText("Question 2 of 3: Plan approach")).toBeInTheDocument();
+  });
+
   it("shows completion state when all stages are done", () => {
     const { container } = render(
       <StageCard

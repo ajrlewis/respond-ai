@@ -542,48 +542,45 @@
   display: grid;
   gap: var(--space-8);
 }
-.stageTicker {
+.agentStatusNode {
   margin-top: 2px;
   min-height: 24px;
-  display: flex;
-  align-items: center;
-  overflow: hidden;
+  display: grid;
+  gap: 2px;
 }
-.stageTickerText {
+.agentStatusLine {
   margin: 0;
-  font-size: 0.86rem;
   line-height: 1.4;
-  position: relative;
   display: inline-block;
+  width: fit-content;
+  max-width: 100%;
 }
-.stageTickerTextRunning {
-  color: rgba(47, 79, 104, 0.16);
-  font-weight: 600;
+.agentStatusPrimary {
+  font-size: 0.9rem;
+  font-weight: 640;
 }
-.stageTickerTextRunning::after {
-  content: attr(data-stage);
-  position: absolute;
-  left: 0;
-  top: 0;
-  color: transparent;
+.agentStatusSecondary {
+  font-size: 0.85rem;
+  font-weight: 580;
+}
+.agentStatusLineRunning {
+  color: rgba(28, 57, 82, 0.34);
   background-image: linear-gradient(
     90deg,
-    rgba(47, 79, 104, 0.2) 0%,
-    rgba(47, 79, 104, 0.95) 40%,
-    #1f3c56 100%
+    rgba(28, 57, 82, 0.34) 0%,
+    rgba(255, 255, 255, 0.98) 50%,
+    rgba(28, 57, 82, 0.34) 100%
   );
   background-size: 200% 100%;
-  background-position: 100% 0;
+  background-position: -200% 0;
   -webkit-background-clip: text;
   background-clip: text;
-  white-space: nowrap;
-  overflow: hidden;
-  width: 0;
-  animation: stageTickerReveal 1.5s ease-out forwards;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: statusShimmer 3s ease-in-out infinite;
 }
-.stageTickerTextDone {
+.agentStatusLineDone {
   color: #5f7388;
-  font-weight: 470;
 }
 .stageRow {
   margin: 0; border: 1px solid var(--stroke); border-radius: var(--radius-sm); background: #f8fafd;
@@ -627,12 +624,6 @@
   background: #edf8f2;
   flex: 0 0 auto;
 }
-.processingStripTitle {
-  margin: 0;
-  color: #1c3952;
-  font-size: 0.84rem;
-  font-weight: 640;
-}
 .processingStripMeta {
   margin: 2px 0 0;
   color: #4f687f;
@@ -658,20 +649,17 @@
     transform: rotate(360deg);
   }
 }
-@keyframes stageTickerReveal {
+@keyframes statusShimmer {
   0% {
-    width: 0;
-    opacity: 0.45;
-    background-position: 100% 0;
-  }
-  60% {
-    width: 100%;
-    opacity: 1;
-    background-position: 28% 0;
+    background-position: -200% 0;
   }
   100% {
-    width: 100%;
-    opacity: 1;
+    background-position: 200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agentStatusLineRunning {
+    animation: none;
     background-position: 0 0;
   }
 }
