@@ -25,7 +25,7 @@ def test_workspace_config_route_reads_client_and_branding_payload(monkeypatch) -
             "workspace_subtitle": "Evidence-grounded drafting.",
             "start_title": "Submission Workspace",
             "start_subtitle": "Upload or use examples.",
-            "logo_path": "config/assets/logo.jpeg",
+            "logo_path": "config/assets/logo.svg",
         },
     )
     monkeypatch.setattr(
@@ -40,7 +40,7 @@ def test_workspace_config_route_reads_client_and_branding_payload(monkeypatch) -
     assert payload.client.display_name == "Gresham House"
     assert payload.client.enabled_features == ["response_documents", "review_workspace_v2"]
     assert payload.branding.company_name == "Gresham House"
-    assert payload.branding.logo_src == "/api/client-config/assets/logo.jpeg"
+    assert payload.branding.logo_src == "/api/client-config/assets/logo.svg"
     assert payload.workspace == {"ui_flags": {"show_example_questions": True}}
 
 

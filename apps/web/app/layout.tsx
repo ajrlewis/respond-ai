@@ -21,8 +21,8 @@ export const metadata: Metadata = {
   title: "RespondAI",
   description: "RFP/DDQ drafting workflow with retrieval and human approval.",
   icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
+    icon: ["/api/client-config/assets/favicon.ico", "/favicon.ico"],
+    shortcut: ["/api/client-config/assets/favicon.ico", "/favicon.ico"],
   },
 };
 
