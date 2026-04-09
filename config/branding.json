@@ -4,6 +4,6 @@
   "workspace_subtitle": "Evidence-grounded drafting for alternatives due diligence and RFP responses.",
   "start_title": "Gresham House Submission Workspace",
   "start_subtitle": "Upload a questionnaire or load sample questions to generate a first draft.",
-  "logo_path": "config/assets/logo.jpeg",
+  "logo_path": "config/assets/logo.svg",
   "website": "https://greshamhouse.com/"
 }
