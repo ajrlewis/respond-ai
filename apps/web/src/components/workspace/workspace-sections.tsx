@@ -48,14 +48,18 @@ function AgentStatusNode({ statusText, subText = null, isRunning = true }: Agent
   const hasSubText = (subText?.trim().length ?? 0) > 0;
   if (!hasStatusText && !hasSubText) return null;
 
-  const stateClassName = isRunning ? styles.agentStatusLineRunning : styles.agentStatusLineDone;
+  const subTextStateClassName = isRunning ? styles.agentStatusLineRunning : styles.agentStatusLineDone;
   return (
     <div className={styles.agentStatusNode} aria-live="polite">
       {hasStatusText ? (
-        <p className={`${styles.agentStatusLine} ${styles.agentStatusPrimary} ${stateClassName}`}>{statusText}</p>
+        <p className={`${styles.agentStatusLine} ${styles.agentStatusPrimary} ${styles.agentStatusTitle}`}>
+          {statusText}
+        </p>
       ) : null}
       {hasSubText ? (
-        <p className={`${styles.agentStatusLine} ${styles.agentStatusSecondary} ${stateClassName}`}>{subText}</p>
+        <p className={`${styles.agentStatusLine} ${styles.agentStatusSecondary} ${subTextStateClassName}`}>
+          {subText}
+        </p>
       ) : null}
     </div>
   );

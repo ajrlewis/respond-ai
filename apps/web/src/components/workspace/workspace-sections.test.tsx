@@ -215,8 +215,13 @@ describe("ProcessingStatusStrip", () => {
       />,
     );
 
-    expect(screen.getByText("Applying revision")).toBeInTheDocument();
-    expect(screen.getByText("Question 1 of 1: Revise draft text")).toBeInTheDocument();
+    const title = screen.getByText("Applying revision");
+    const subStatus = screen.getByText("Question 1 of 1: Revise draft text");
+
+    expect(title).toBeInTheDocument();
+    expect(subStatus).toBeInTheDocument();
+    expect(title.className).not.toMatch(/agentStatusLineRunning/);
+    expect(subStatus.className).toMatch(/agentStatusLineRunning/);
     expect(screen.getByText("In progress")).toBeInTheDocument();
   });
 });
