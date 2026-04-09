@@ -87,7 +87,7 @@ export function WorkspaceHeader({
 }: WorkspaceHeaderProps) {
   return (
     <header className={styles.header}>
-      <div className={styles.brandBar}>
+      <nav className={styles.navBar} aria-label="Workspace navigation">
         <div className={styles.brandBarIdentity}>
           {logoSrc ? (
             <img className={styles.logo} src={logoSrc} alt={`${companyName} logo`} />
@@ -103,7 +103,7 @@ export function WorkspaceHeader({
             {isLoggingOut ? "Logging out..." : "Logout"}
           </button>
         ) : null}
-      </div>
+      </nav>
       <div className={styles.workspaceHeader}>
         <h1>{workspaceTitle}</h1>
         {workspaceSubtitle ? <p className={styles.workspaceSubtitle}>{workspaceSubtitle}</p> : null}

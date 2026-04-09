@@ -56,7 +56,7 @@
   display: grid;
   gap: var(--space-8);
 }
-.brandBar {
+.navBar {
   border: 1px solid var(--stroke);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -70,6 +70,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-12);
+  min-width: 0;
 }
 .workspaceHeader {
   border: 1px solid var(--stroke);
@@ -79,30 +80,31 @@
 }
 .logo,
 .logoFallback {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  height: 34px;
 }
 .logo {
-  border: 1px solid var(--stroke);
-  background: #ffffff;
-  object-fit: cover;
+  width: auto;
+  max-width: min(44vw, 220px);
+  object-fit: contain;
+  flex: 0 0 auto;
 }
 .logoFallback {
   display: inline-flex;
+  width: 34px;
   align-items: center;
   justify-content: center;
+  border-radius: 10px;
   background: #264e78;
   color: #ffffff;
   font-weight: 700;
 }
 .companyName {
   margin: 0;
-  color: #3d556c;
-  font-size: 0.78rem;
-  font-weight: 620;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  color: #2f4a61;
+  font-size: 1rem;
+  font-weight: 640;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 .workspaceHeader h1 {
   margin: 2px 0 0;
@@ -677,7 +679,13 @@
   .page {
     padding: var(--space-16);
   }
-  .brandBar, .documentHeader, .revisionToggleRow, .reviewActions, .compareHeader, .processingStrip { flex-direction: column; align-items: flex-start; }
+  .documentHeader, .revisionToggleRow, .reviewActions, .compareHeader, .processingStrip { flex-direction: column; align-items: flex-start; }
+  .navBar {
+    gap: var(--space-8);
+  }
+  .logo {
+    max-width: min(58vw, 210px);
+  }
   .revisionComposerOverlay {
     position: static;
     width: 100%;
