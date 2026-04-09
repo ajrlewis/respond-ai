@@ -12,6 +12,7 @@ import {
   WorkspaceHeader,
 } from "@/components/workspace/workspace-sections";
 import { ReviewV2EditingView } from "@/components/workspace/editing-view";
+import { buildExportFilename, buildExportMarkdown } from "@/components/workspace/export-markdown";
 import {
   AI_STAGE_LABELS,
   GENERATION_STAGE_LABELS,
@@ -614,12 +615,28 @@ export function ReviewV2Shell({
     try {
       const nextDocument = await approveResponseDocumentVersion(document.id, selectedVersion.id);
       setDocument(nextDocument);
-      setNotice(`Version ${selectedVersion.version_number} approved.`);
+      setNotice(`Version ${selectedVersion.version_number} approved. Export Markdown is now available.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to approve this version.");
     } finally {
       setIsApproving(false);
     }
+  }
+
+  function handleExportMarkdown() {
+    if (!document || !selectedVersion || !selectedVersion.is_final) return;
+
+    const markdown = buildExportMarkdown(document, selectedVersion);
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = window.document.createElement("a");
+    anchor.href = url;
+    anchor.download = buildExportFilename(document, selectedVersion.version_number);
+    window.document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice(`Version ${selectedVersion.version_number} exported as Markdown.`);
   }
 
   async function handleDeleteVersion(version: ResponseVersionSummary) {
@@ -743,6 +760,7 @@ export function ReviewV2Shell({
                 }
                 onSectionFocus={setFocusedQuestionId}
                 onSaveVersion={handleSaveVersion}
+                onExport={handleExportMarkdown}
                 onApprove={handleApproveVersion}
                 canSuggestChanges={canSuggestChanges}
                 allowQuestionScopedRevision={allowQuestionScopedRevision}

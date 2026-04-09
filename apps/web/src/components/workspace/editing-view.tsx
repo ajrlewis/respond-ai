@@ -41,6 +41,7 @@ type ReviewV2EditingViewProps = {
   onSectionChange: (questionId: string, value: string) => void;
   onSectionFocus: (questionId: string) => void;
   onSaveVersion: () => void;
+  onExport: () => void;
   onApprove: () => void;
   canSuggestChanges: boolean;
   allowQuestionScopedRevision: boolean;
@@ -86,6 +87,7 @@ export function ReviewV2EditingView({
   onSectionChange,
   onSectionFocus,
   onSaveVersion,
+  onExport,
   onApprove,
   canSuggestChanges,
   allowQuestionScopedRevision,
@@ -168,18 +170,36 @@ export function ReviewV2EditingView({
           <button
             type="button"
             onClick={onApprove}
-            disabled={loading || isSavingVersion || isAskingAi || isApproving || hasUnsavedChanges}
+            disabled={
+              selectedVersion.is_final ||
+              loading ||
+              isSavingVersion ||
+              isAskingAi ||
+              isApproving ||
+              hasUnsavedChanges
+            }
           >
             {isApproving ? "Approving..." : selectedVersion.is_final ? "Approved" : approveButtonLabel}
           </button>
-          <button
-            type="button"
-            className={styles.secondaryButton}
-            onClick={onSaveVersion}
-            disabled={!hasUnsavedChanges || isSavingVersion || isProcessing || loading || isApproving}
-          >
-            {isSavingVersion ? "Saving..." : "Save draft"}
-          </button>
+          {selectedVersion.is_final ? (
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={onExport}
+              disabled={isSavingVersion || isProcessing || loading || isApproving}
+            >
+              Export Markdown
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={onSaveVersion}
+              disabled={!hasUnsavedChanges || isSavingVersion || isProcessing || loading || isApproving}
+            >
+              {isSavingVersion ? "Saving..." : "Save draft"}
+            </button>
+          )}
           {notice ? <p className={styles.inlineNotice}>{notice}</p> : null}
         </div>
       </section>
