@@ -2,7 +2,7 @@
   "company_name": "Gresham House",
   "workspace_title": "Response Workspace",
   "workspace_subtitle": "Evidence-grounded drafting for due diligence and RFP responses.",
-  "start_title": "Submission Workspace",
+  "start_title": "Submission Draft",
   "start_subtitle": "Upload a questionnaire or load sample questions to start drafting.",
   "logo_path": "config/assets/logo.svg",
   "website": "https://greshamhouse.com/"

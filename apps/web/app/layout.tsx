@@ -18,7 +18,7 @@ const bodyFont = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "RespondAI",
+  title: "Gresham House | Response Workspace",
   description: "RFP/DDQ drafting workflow with retrieval and human approval.",
   icons: {
     icon: ["/api/client-config/assets/favicon.ico", "/favicon.ico"],
