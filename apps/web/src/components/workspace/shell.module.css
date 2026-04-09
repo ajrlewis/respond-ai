@@ -53,34 +53,32 @@
 .header {
   max-width: 1360px;
   margin: 0 auto;
-  display: grid;
-  gap: var(--space-8);
 }
 .navBar {
   border: 1px solid var(--stroke);
   border-radius: var(--radius-lg);
   background: var(--surface);
-  padding: 10px var(--space-16);
+  padding: 12px var(--space-16);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-12);
 }
 .brandBarIdentity {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-12);
   min-width: 0;
+  flex: 1 1 auto;
 }
-.workspaceHeader {
-  border: 1px solid var(--stroke);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  padding: var(--space-16);
+.brandText {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
 }
 .logo,
 .logoFallback {
-  height: 34px;
+  height: 36px;
 }
 .logo {
   width: auto;
@@ -100,21 +98,23 @@
 }
 .companyName {
   margin: 0;
-  color: #2f4a61;
-  font-size: 1rem;
-  font-weight: 640;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
+  color: #5a6f83;
+  font-size: 0.74rem;
+  font-weight: 620;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
-.workspaceHeader h1 {
-  margin: 2px 0 0;
-  font-size: clamp(1.05rem, 1.7vw, 1.3rem);
+.workspaceTitle {
+  margin: 0;
+  font-size: clamp(1rem, 1.6vw, 1.2rem);
   font-weight: 650;
+  line-height: 1.2;
 }
 .workspaceSubtitle {
-  margin: var(--space-8) 0 0;
+  margin: 0;
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
 }
 .startState {
   max-width: 1360px;
@@ -682,6 +682,12 @@
   .documentHeader, .revisionToggleRow, .reviewActions, .compareHeader, .processingStrip { flex-direction: column; align-items: flex-start; }
   .navBar {
     gap: var(--space-8);
+  }
+  .brandBarIdentity {
+    width: 100%;
+  }
+  .workspaceTitle {
+    font-size: 1rem;
   }
   .logo {
     max-width: min(58vw, 210px);

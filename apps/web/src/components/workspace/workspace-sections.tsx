@@ -96,7 +96,11 @@ export function WorkspaceHeader({
               {companyName.slice(0, 1)}
             </span>
           )}
-          <p className={styles.companyName}>{companyName}</p>
+          <div className={styles.brandText}>
+            <p className={styles.companyName}>{companyName}</p>
+            <h1 className={styles.workspaceTitle}>{workspaceTitle}</h1>
+            {workspaceSubtitle ? <p className={styles.workspaceSubtitle}>{workspaceSubtitle}</p> : null}
+          </div>
         </div>
         {onLogout ? (
           <button type="button" className={styles.ghostButton} onClick={onLogout} disabled={isLoggingOut}>
@@ -104,10 +108,6 @@ export function WorkspaceHeader({
           </button>
         ) : null}
       </nav>
-      <div className={styles.workspaceHeader}>
-        <h1>{workspaceTitle}</h1>
-        {workspaceSubtitle ? <p className={styles.workspaceSubtitle}>{workspaceSubtitle}</p> : null}
-      </div>
     </header>
   );
 }
