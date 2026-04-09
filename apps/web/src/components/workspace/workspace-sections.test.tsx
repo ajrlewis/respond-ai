@@ -215,8 +215,13 @@ describe("ProcessingStatusStrip", () => {
       />,
     );
 
-    expect(screen.getByText("Applying revision")).toBeInTheDocument();
-    expect(screen.getByText("Question 1 of 1: Revise draft text")).toBeInTheDocument();
+    const title = screen.getByText("Applying revision");
+    const subStatus = screen.getByText("Question 1 of 1: Revise draft text");
+
+    expect(title).toBeInTheDocument();
+    expect(subStatus).toBeInTheDocument();
+    expect(title.className).not.toMatch(/agentStatusLineRunning/);
+    expect(subStatus.className).toMatch(/agentStatusLineRunning/);
     expect(screen.getByText("In progress")).toBeInTheDocument();
   });
 });
@@ -253,6 +258,21 @@ describe("StageCard", () => {
     );
 
     expect(screen.getByText("Question 1 of 3: Draft response sections")).toBeInTheDocument();
+  });
+
+  it("keeps status and scoped stage labels visible for varied text lengths", () => {
+    render(
+      <StageCard
+        title="Generating draft"
+        scopeLabel="Question 2 of 3"
+        stages={[
+          { label: "Plan approach", status: "running" },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Generating draft")).toBeInTheDocument();
+    expect(screen.getByText("Question 2 of 3: Plan approach")).toBeInTheDocument();
   });
 
   it("shows completion state when all stages are done", () => {

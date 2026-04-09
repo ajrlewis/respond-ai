@@ -15,9 +15,10 @@ type Stage = {
   status: "idle" | "running" | "done";
 };
 
-type TaskTickerProps = {
-  label: string;
-  isRunning: boolean;
+type AgentStatusNodeProps = {
+  statusText: string;
+  subText?: string | null;
+  isRunning?: boolean;
 };
 
 function stageStatusLabel(status: Stage["status"]): string {
@@ -42,17 +43,24 @@ function stageTickerLabel(stageLabel: string, scopeLabel?: string | null): strin
   return `${scopeLabel}: ${stageLabel}`;
 }
 
-function TaskTicker({ label, isRunning }: TaskTickerProps) {
-  if (!label.trim()) return null;
+function AgentStatusNode({ statusText, subText = null, isRunning = true }: AgentStatusNodeProps) {
+  const hasStatusText = statusText.trim().length > 0;
+  const hasSubText = (subText?.trim().length ?? 0) > 0;
+  if (!hasStatusText && !hasSubText) return null;
+
+  const subTextStateClassName = isRunning ? styles.agentStatusLineRunning : styles.agentStatusLineDone;
   return (
-    <div className={styles.stageTicker} aria-live="polite">
-      <p
-        key={`${label}-${isRunning ? "running" : "done"}`}
-        className={`${styles.stageTickerText} ${isRunning ? styles.stageTickerTextRunning : styles.stageTickerTextDone}`}
-        data-stage={label}
-      >
-        {label}
-      </p>
+    <div className={styles.agentStatusNode} aria-live="polite">
+      {hasStatusText ? (
+        <p className={`${styles.agentStatusLine} ${styles.agentStatusPrimary} ${styles.agentStatusTitle}`}>
+          {statusText}
+        </p>
+      ) : null}
+      {hasSubText ? (
+        <p className={`${styles.agentStatusLine} ${styles.agentStatusSecondary} ${subTextStateClassName}`}>
+          {subText}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -206,10 +214,7 @@ export function StageCard({ title, stages, scopeLabel = null }: StageCardProps) 
     <section className={styles.centerCard}>
       <div className={styles.processingHeader}>
         <span className={isComplete ? styles.processingDoneDot : styles.runSpinner} aria-hidden="true" />
-        <div>
-          <h3>{title}</h3>
-          <TaskTicker label={tickerLabel} isRunning={!isComplete} />
-        </div>
+        <AgentStatusNode statusText={title} subText={tickerLabel} isRunning={!isComplete} />
       </div>
     </section>
   );
@@ -238,10 +243,7 @@ export function ProcessingStatusStrip({
           className={isRunning ? styles.runSpinner : styles.processingDoneDot}
           aria-hidden="true"
         />
-        <div>
-          <p className={styles.processingStripTitle}>{title}</p>
-          <TaskTicker label={processingLabel} isRunning={isRunning} />
-        </div>
+        <AgentStatusNode statusText={title} subText={processingLabel} isRunning={isRunning} />
       </div>
       <p className={styles.processingStripState}>{isRunning ? "In progress" : "Completed"}</p>
     </section>
