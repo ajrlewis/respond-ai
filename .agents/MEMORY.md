@@ -58,6 +58,7 @@ Write to this file when you discover, confirm, or change durable facts, includin
 - Branding assets now prefer `config/assets/logo.svg` and `config/assets/favicon.ico`; web metadata points favicon links at `/api/client-config/assets/favicon.ico` with `/favicon.ico` fallback.
 - Review-v2 top header now renders the brand row as a nav bar and displays client logos with preserved aspect ratio (`object-fit: contain`) instead of square-cropping.
 - LangGraph checkpointer tables/indexes are initialized once during API startup; workflow runs no longer call checkpointer setup per request.
+- In review-v2 editing, non-final versions keep `Save draft`; once a version is approved, the secondary action becomes `Export Markdown`, which downloads combined question/answer content with per-question citation references for that approved version.
 
 ## Example update
 
